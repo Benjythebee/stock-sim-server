@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Data Visualization</title>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3.4.4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        #chart-container {
+            height: 400px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Real-time Data Monitor</h1>
+        <div id="status" class="status disconnected">Disconnected</div>
+        <div id="chart-container">
+            <canvas id="dataChart"></canvas>
+
+            <div style="margin-top: 20px;">
+                <h3>Order Book Depth</h3>
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1;">
+                        <h4 style="color: #dc3545;">Asks (Sell Orders)</h4>
+                        <table id="asksTable" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background-color: #f8f9fa;">
+                                    <th style="border: 1px solid #ddd; padding: 8px;">Price</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="depth-ask">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="flex: 1;">
+                        <h4 style="color: #28a745;">Bids (Buy Orders)</h4>
+                        <table id="bidsTable" style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background-color: #f8f9fa;">
+                                    <th style="border: 1px solid #ddd; padding: 8px;">Price</th>
+                                    <th style="border: 1px solid #ddd; padding: 8px;">Quantity</th>
+                                </tr>
+                            </thead>
+                            <tbody id="depth-bid">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="portfolio-container">
+                <h3>Portfolio</h3>
+                <div id="portfolio-details" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+                    <!-- Portfolio details will be populated here -->
+                </div>
+
+            <button onClick="sendShock()">Send shock</button>
+        </div>
+    </div>
+
+    <script >
+
+        // Chart.register(CandlestickController);
+        const ws = new WebSocket('http://localhost:3001/');
+        const statusDiv = document.getElementById('status');
+        const ctx = document.getElementById('dataChart').getContext('2d');
+
+        const timeLabels = []
+
+        const chart = new Chart(ctx, {
+            type: 'candlestick',
+            data: {
+                // labels: [],
+                datasets: [{
+                    label: 'Close price',
+                    data: [],
+                    // borderColor: 'rgb(75, 192, 192)',
+                    // backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    // tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Price'
+                        }
+                    }
+                },
+                plugins: {
+                    legend: {
+                        display: true
+                    }
+                }
+            }
+        });
+
+        ws.onopen = function() {
+            statusDiv.textContent = 'Connected';
+            statusDiv.className = 'status connected';
+        };
+
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                const type = data.type;
+                if(type === 'clock'){
+                    // Handle clock updates
+                    // const timestamp = new Date(data.value).toLocaleTimeString();
+                    // chart.data.labels.push(timestamp);
+                    
+                    timeLabels.push(luxon.DateTime.fromMillis(data.value));
+
+                    // Initialize a new candlestick with null values
+                    // It will be populated when the first price arrives
+                    // chart.data.datasets[0].data.push({});
+                    
+                    // Keep only last 80 data points
+                    if (timeLabels.length > 80) {
+                        timeLabels.shift();
+                        chart.data.datasets[0].data.shift();
+
+                        // chart.data.labels.shift();
+                        // chart.data.datasets[0].data.shift();
+                    }
+                }
+
+                if (type === 'price') {
+                        const l = timeLabels.length;
+
+                        const price = data.value;
+
+                        
+                        if (l > 0) {
+                            const currentCandle = chart.data.datasets[0].data[l - 1];
+                            
+                            if (!currentCandle) {
+                                // First price for this candlestick
+                                chart.data.datasets[0].data[l - 1] = {
+                                    x: timeLabels[timeLabels.length - 1].valueOf(),
+                                    o: price,  // open
+                                    h: price,  // high
+                                    l: price,  // low
+                                    c: price   // close
+                                };
+                            } else {
+                                // Update existing candlestick
+                                currentCandle.h = Math.max(currentCandle.h, price);
+                                currentCandle.l = Math.min(currentCandle.l, price);
+                                currentCandle.c = price;
+                            }
+                        } else {
+                            
+                            if(!timeLabels.length) return;
+                            // No timestamp yet, create first entry
+                            chart.data.datasets[0].data.push({
+                                x: new Date(timeLabels[timeLabels.length - 1]).valueOf(),
+                                o: price,
+                                h: price,
+                                l: price,
+                                c: price
+                            });
+                        }
+                        // Change chart scales dynamically
+                        const prices = chart.data.datasets[0].data.map(c => [c.l, c.h]).flat();
+                        const minPrice = Math.min(...prices);
+                        const maxPrice = Math.max(...prices);
+                        chart.options.scales.y.min = minPrice * 0.95;
+                        chart.options.scales.y.max = maxPrice * 1.05;
+                        // console.log('Updated price:', prices);
+
+                        addToDepth(data.depth);
+                    }
+                    
+                if( type ==='portfolio'){
+                    const p = data.value; // {id:string, cash:number, shares:number}
+                    addPortfolioDetails(p);
+                }
+            
+                    
+                chart.update('none');
+            } catch (error) {
+                console.error('Error parsing WebSocket data:', error);
+            }
+        };
+
+        ws.onclose = function() {
+            statusDiv.textContent = 'Disconnected';
+            statusDiv.className = 'status disconnected';
+        };
+
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+            statusDiv.textContent = 'Connection Error';
+            statusDiv.className = 'status disconnected';
+        };
+
+        const sendShock = () => {
+            if(ws.readyState === WebSocket.OPEN){
+                ws.send(JSON.stringify({type:'shock'}));
+            }
+        }
+
+        const addToDepth = (depth)=>{ // [[number, number][], [number, number][]]
+
+            const depthAskColumn = document.getElementById('depth-ask');
+            const depthBidColumn = document.getElementById('depth-bid');
+            depthAskColumn.innerHTML = '';
+            depthBidColumn.innerHTML = '';
+            const [asks, bids] = depth;
+
+            const addAskRow = (price, quantity) => {
+                let row = document.getElementById('ask-'+price)
+                if(!row){
+                    row = document.createElement('tr');
+                    row.id = 'ask-'+price
+                    depthAskColumn.appendChild(row);
+                }
+                let priceCell = row.querySelector('td:nth-child(1)');
+                let quantityCell = row.querySelector('td:nth-child(2)');
+
+                if(!priceCell){
+                    priceCell = document.createElement('td');
+                    row.appendChild(priceCell);
+                }
+                if(!quantityCell){
+                    quantityCell = document.createElement('td');
+                    row.appendChild(quantityCell);
+                }
+
+                priceCell.textContent = price.toFixed(2);
+                quantityCell.textContent = quantity.toString();
+                // row.appendChild(priceCell);
+                // row.appendChild(quantityCell);
+                // depthAskColumn.appendChild(row);
+            };
+
+            const addBidRow = (price, quantity) => {
+                let row = document.getElementById('bid-'+price)
+                if(!row){
+                    row = document.createElement('tr');
+                    row.id = 'bid-'+price
+                    depthBidColumn.appendChild(row);
+                }
+                let priceCell = row.querySelector('td:nth-child(1)');
+                let quantityCell = row.querySelector('td:nth-child(2)');
+
+                if(!priceCell){
+                    priceCell = document.createElement('td');
+                    row.appendChild(priceCell);
+                }
+                if(!quantityCell){
+                    quantityCell = document.createElement('td');
+                    row.appendChild(quantityCell);
+                }
+                priceCell.textContent = price.toFixed(2);
+                quantityCell.textContent = quantity.toString();
+            };
+            
+            asks.sort((a,b)=>Number(a[0])-Number(b[0]));
+
+            asks.map(([price, quantity])=>{
+                addAskRow(price, quantity);
+            })
+
+            bids.sort((a,b)=>Number(b[0])-Number(a[0]));
+            bids.map(([price, quantity])=>{
+                addBidRow(price, quantity);
+            })
+
+
+        }
+    
+        const addPortfolioDetails = (portfolio) => {
+            const portfolioContainer = document.getElementById('portfolio-details');
+            
+            let child = document.getElementById(`portfolio-${portfolio.id}`);
+
+            if (!child) {
+                child = document.createElement('div');
+                child.id = `portfolio-${portfolio.id}`;
+                portfolioContainer.appendChild(child);
+            }
+
+            child.innerHTML = `
+                <p><strong>ID:</strong> ${portfolio.id}</p>
+                <p><strong>Cash:</strong> $${portfolio.cash.toFixed(2)}</p>
+                <p><strong>PnL:</strong> ${portfolio.profitLoss}</p>
+                <p><strong>Shares:</strong> ${portfolio.shares}</p>
+            `;
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,630 @@
+import  { OrderBook, Side } from "nodejs-order-book";
+import type { Simulator, Snapshot } from "./simulator";
+import type { Order, OrderBookWrapper } from "./orderBookWrapper";
+import { priceTwoDecimal } from "./priceGenerator";
+import { SeededRandomGenerator } from "./seededRandomGenerator";
+
+export type InventoryConfig = { 
+  initialCash: number; 
+  initialShares: number
+  orderSize?: number
+  seed?: number
+ };
+type SimConfig = {
+  minimumSpreadCurrency: number;
+}
+
+export abstract class TradingParticipant {
+  public id: string;
+  private initialCash: number;
+  protected _lockedCash: number = 0;
+  protected _lockedShares: number = 0;
+  protected _availableCash: number;
+  protected _shares: number
+  protected _profitLoss: number = 0;
+
+  public randomGenerator: SeededRandomGenerator;
+
+  constructor(id: string, {initialCash, initialShares,seed}: Partial<InventoryConfig> = {
+    initialCash: 10000,
+    initialShares: 0,
+    seed: 42
+  }) {
+    this.randomGenerator = new SeededRandomGenerator(seed || 42);
+    this.id = id;
+    this._availableCash = initialCash || 10000;
+    this.initialCash = this._availableCash
+    this._shares = initialShares || 0;
+  }
+
+  random=()=>{
+    return this.randomGenerator.next();
+  }
+
+  get lockedCash(): number {
+    return this._lockedCash;
+  }
+
+  get lockedShares(): number {
+    return this._lockedShares;
+  }
+
+  get availableCash(): number {
+    return this._availableCash;
+  }
+
+  get shares(): number {
+    return this._shares;
+  }
+
+  get profitLoss(): number {
+    return this._profitLoss;
+  }
+
+  setInitialCash (cash: number) {
+    this.initialCash = cash;
+  }
+
+  set availableCash(value: number) {
+    this._availableCash = value;
+    this._profitLoss = value - this.initialCash;
+    this.onPortfolioUpdate?.(this.portfolio);
+  }
+
+  set shares(value: number) {
+    this._shares = value;
+    this.onPortfolioUpdate?.(this.portfolio);
+  }
+
+  onPortfolioUpdate: ((portfolio: { id:string, cash: number; shares: number }) => void) | undefined = undefined;
+
+  onOrderProcessed=(result:{orderId:string, quantity: number, cost:number})=>{
+    if(!this.id.includes('Bot')){
+      console.log(this.id ,result)
+    }
+    if(result.cost > 0){
+      // Buy order processed
+      this._lockedCash -= result.cost; 
+      this.shares += result.quantity;
+    }else {
+      // Sell order processed
+      this.availableCash -= result.cost;
+      this._lockedShares -= result.quantity;
+    }
+  }
+
+  get portfolio(): { id:string, profitLoss: number, cash: number; shares: number } {
+    return { id: this.id, profitLoss: this._profitLoss, cash: this.availableCash, shares: this.shares };
+  }
+}
+
+// Trading Bot Base Class
+abstract class TradingBot extends TradingParticipant {
+  protected debug: boolean;
+  protected orderSize: number;
+  simConfig:SimConfig
+  
+  ordersInStandby: Map<string, Order> = new Map();
+
+  constructor(id: string, {initialCash, initialShares, orderSize}: Partial<InventoryConfig> = {
+    initialCash: 10000,
+    initialShares: 0,
+    orderSize: 10
+  }, simConfig:Partial<SimConfig> = {minimumSpreadCurrency: 0.01}, debug: boolean = false) {
+    super(id, {initialCash, initialShares});
+    this.orderSize = orderSize || (Math.floor(this.random() * 20) + 5); // Default order size between 5 and 25
+    this.debug = debug;
+
+    if (debug) {
+      console.log(`Bot ${this.id} initialized with $${this.availableCash}`);
+    }
+
+    if(!simConfig.minimumSpreadCurrency) {
+        simConfig.minimumSpreadCurrency = 0.05; // Default to 5 cent spread
+    }
+    this.simConfig = simConfig as SimConfig;
+    
+  }
+
+
+
+  hasBuyOrders = (snapshot:Snapshot, price?:number) =>{
+    if(price){
+      const buyOrders = snapshot.bids.filter((c)=>c.orders.find((o)=>o.id.includes(this.id))) // bids
+      return buyOrders.find((c)=>c.price===price)
+    }else{
+      return snapshot.bids.some((c)=>c.orders.some((o)=>o.id.includes(this.id))) // bids
+    }
+  }
+
+  autoCancelOldOrders=(simulator: Simulator, side?: Side, olderThan: number = 10000)=>{
+    const orders = simulator.orderBookW.orderByIDs.get(this.id);
+    if(!orders) return;
+    this.cancelAllOrders(simulator,side,olderThan);
+  }
+
+
+  hasSellOrders = (snapshot:Snapshot, price?:number)=>{
+    if(price){
+      const sellOrders = snapshot.asks.filter((c)=>c.orders.find((o)=>o.id.includes(this.id))) // asks
+      return sellOrders.find((c)=>c.price===price)
+    }else{
+      /**
+       * if we have locked shares we have sell orders
+       */
+      return this._lockedShares > 0
+    }
+  }
+  abstract makeDecision(
+    currentPrice: number, 
+    priceHistory: number[], 
+    simulator: Simulator,
+    snapshot: Snapshot,
+    guidePrice?: number
+  ): void;
+
+  protected placeBuyOrder(simulator: Simulator, price: number, quantity: number, type: 'market' | 'limit' = 'limit'): void {
+    const cost = price * quantity;
+    if (this.availableCash >= cost) {
+        this._lockedCash += cost;
+        this.availableCash -= cost;
+        const orderId = `${this.id}-$-${Date.now()}`;
+        if (type === 'market') {
+          simulator.orderBookW.addMarketOrder(this.id, orderId, Side.BUY, quantity);
+        } else {
+          simulator.orderBookW.addLimitOrder(this.id, orderId, Side.BUY, price, quantity);
+        }
+        if(this.debug){
+          console.log(`Bot ${this.id} placed BUY order: ${quantity} shares at $${price.toFixed(2)}`);
+        }
+    }
+  }
+
+
+  protected cancelAllOrders(simulator: Simulator, side?: Side, olderThan?: number): ReturnType<OrderBook['cancel']> {
+    const orders = simulator.orderBookW.orderByIDs.get(this.id);
+    if(!orders) return;
+
+
+    const cancelSide = (map: Map<number, Order[]>)=>{
+      map.forEach((v)=>{
+        v.forEach((k)=>{
+          let canceled;
+          if(olderThan && k.time + olderThan < Date.now()){
+            canceled = simulator.orderBookW.orderBook.cancel(k.id);
+          }else{
+            canceled = simulator.orderBookW.orderBook.cancel(k.id);
+          }
+
+          if(canceled){
+            this._lockedCash -= canceled.order.price * canceled.order.size;
+            this.availableCash += canceled.order.price * canceled.order.size;
+            this._lockedShares -= canceled.order.size;
+            this.shares += canceled.order.size;
+          }
+        })
+      })
+    }
+
+    if(side){
+      if(side===Side.BUY){
+          cancelSide(orders[0]);
+      }else if(side===Side.SELL){
+          cancelSide(orders[1]);
+      }
+      return
+    }
+
+    
+    orders?.forEach((o)=>{
+      cancelSide(o);
+    })
+  }
+
+
+  protected placeSellOrder(simulator: Simulator, price: number, quantity: number, type: 'market' | 'limit' = 'limit'): void {
+    if (this.shares >= quantity) {
+        this._lockedShares += quantity;
+        this.shares -= quantity;
+        if(type === 'market'){
+          simulator.orderBookW.addMarketOrder(this.id,`${this.id}-$-${Date.now()}`,Side.SELL,quantity);
+        } else {
+          simulator.orderBookW.addLimitOrder(this.id,`${this.id}-$-${Date.now()}`,Side.SELL,price,quantity);
+        }
+        
+      }
+      if(this.debug){
+        console.log(`Bot ${this.id} placed SELL order: ${quantity} shares at $${price.toFixed(2)}`);
+      }
+  }
+  
+
+  getPortfolioValue(currentPrice: number): number {
+    return this.availableCash + (this.shares * currentPrice);
+  }
+
+}
+
+// Momentum Bot - buys when price is rising, sells when falling
+class MomentumBot extends TradingBot {
+  private lookbackPeriod: number;
+
+  constructor(id: string,  inventoryParams:InventoryConfig, simConfig:Partial<SimConfig> = {minimumSpreadCurrency: 0.01}, lookbackPeriod = 5) {
+    super(id, inventoryParams, simConfig);
+    this.lookbackPeriod = lookbackPeriod;
+  }
+
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): void {
+    if(!currentPrice) return;
+    if(priceHistory.length < 2) return;
+    if (priceHistory.length < this.lookbackPeriod + 1) return;
+
+    const recentPrices = priceHistory.slice(-this.lookbackPeriod - 1);
+    const pastPriceTMinus1 = recentPrices[recentPrices.length - 1]
+    const currentPriceT0 = recentPrices[0]
+    if(typeof pastPriceTMinus1 !== 'number' || typeof currentPriceT0 !== 'number') return;
+    const momentum = (pastPriceTMinus1 - currentPriceT0) / currentPriceT0
+
+    const priceChange = computePriceChange(currentPrice,this.simConfig.minimumSpreadCurrency,0.001,0.001)
+    const priceBuy = priceChange.upPrice;
+    const priceSell = priceChange.downPrice;
+    
+    if (momentum > 0.01 && this.random() > 0.7) {
+      // Positive momentum - buy
+      const quantity = Math.floor(this.orderSize / currentPrice);
+      // cleanup old orders
+      this.autoCancelOldOrders(simulator, Side.BUY, 5000);
+      if (quantity > 0) {
+        if(this.hasBuyOrders(snapshot,priceBuy)) return;
+
+        this.placeBuyOrder(simulator, priceBuy, quantity);
+      }
+    } else if (momentum < -0.01 && this.shares > 0 && this.random() > 0.7) {
+      // Negative momentum - sell
+      // cleanup old orders
+      this.autoCancelOldOrders(simulator, Side.SELL, 5000);
+      const quantity = this.orderSize
+      if (quantity > 0) {
+        if(this.hasSellOrders(snapshot,priceSell)) return;
+        this.placeSellOrder(simulator, priceSell, quantity);
+      }
+    }
+  }
+}
+
+// Mean Reversion Bot - buys when price is low, sells when high
+class MeanReversionBot extends TradingBot {
+  private lookbackPeriod: number;
+
+  constructor(id: string, inventoryParams: InventoryConfig, simConfig: Partial<SimConfig> = { minimumSpreadCurrency: 0.01 }, lookbackPeriod = 20) {
+    super(id, inventoryParams, simConfig);
+    this.lookbackPeriod = lookbackPeriod;
+  }
+
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot, guidePrice?: number): void {
+    if(!currentPrice) return;
+    if(priceHistory.length < 2) return;
+    if (priceHistory.length < this.lookbackPeriod) return;
+
+    const average = priceHistory.slice(-this.lookbackPeriod).reduce((sum, price) => sum + price, 0) / this.lookbackPeriod;
+
+    const priceChange = computePriceChange(currentPrice,this.simConfig.minimumSpreadCurrency,0.005,0.005)
+
+    // Use guide price to adjust mean reversion threshold
+    if (currentPrice < average * 0.98 && this.random() > 0.5) {
+      // Price significantly below guide - buy
+      const quantity = Math.floor(this.orderSize / currentPrice);
+            // cleanup old orders
+      this.autoCancelOldOrders(simulator, Side.BUY, 5000);
+      if (quantity > 0) {
+        if(this.hasBuyOrders(snapshot,priceChange.upPrice)) return;
+        this.placeBuyOrder(simulator, priceChange.upPrice, quantity);
+      }
+    } else if (currentPrice > average * 1.02 && this.shares > 0 && this.random() > 0.5) {
+      // cleanup old orders
+      this.autoCancelOldOrders(simulator, Side.SELL, 5000);
+      // Price significantly above guide - sell
+      const quantity = this.orderSize;
+      if (quantity > 0) {
+        if(this.hasSellOrders(snapshot,priceChange.downPrice)) return;
+        this.placeSellOrder(simulator, priceChange.downPrice, quantity);
+      }
+    }
+  
+  }
+}
+
+class InformedBot extends TradingBot {
+  private lookbackPeriod: number;
+
+  constructor(id: string, inventoryParams: InventoryConfig, simConfig: Partial<SimConfig> = { minimumSpreadCurrency: 0.01 }, lookbackPeriod = 20) {
+    super(id, inventoryParams, simConfig);
+    this.lookbackPeriod = lookbackPeriod;
+  }
+
+
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator,snapshot:Snapshot, intrinsicValue?: number): void {
+    if(!currentPrice) return;
+    if(priceHistory.length < 2) return;
+    if (priceHistory.length < this.lookbackPeriod) return;
+
+    if (typeof intrinsicValue !== 'number') {
+      return;
+    }
+    
+    if(currentPrice < (intrinsicValue - this.simConfig.minimumSpreadCurrency*1.05)){
+      this.autoCancelOldOrders(simulator, Side.BUY, 5000);
+      // cleanup old orders
+      if (this.availableCash > currentPrice * this.orderSize) {
+        if(this.hasBuyOrders(snapshot,currentPrice)) return;
+        this.placeBuyOrder(simulator, currentPrice, this.orderSize,'market');
+      }
+    }
+
+    if(currentPrice > (intrinsicValue + this.simConfig.minimumSpreadCurrency*1.05)){
+      this.autoCancelOldOrders(simulator, Side.SELL, 5000);
+
+      if (this.shares >= this.orderSize) {
+        if(this.hasSellOrders(snapshot,currentPrice)) return;
+        this.placeSellOrder(simulator, currentPrice, this.orderSize,'market');
+      }
+    }
+  
+  }
+}
+interface LiquidityBotConfig {
+  baseSpread: number;           // Base spread (e.g., 0.005 = 0.5%)
+  maxSpread: number;            // Maximum spread during high volatility
+  targetInventory: number;      // Desired share inventory (can be 0 for neutral)
+  maxInventoryDeviation: number; // Max shares to deviate from target
+  inventorySkewFactor: number;  // How much to skew prices per share deviation
+  volatilityWindow: number;     // Periods to calculate volatility
+  minOrderValue: number;        // Minimum order value to place
+  rebalanceThreshold: number;   // When to aggressively rebalance (% of max deviation)
+}
+// Liquidity Bot - acts as a market maker by maintaining bid/ask spread
+class LiquidityBot extends TradingBot {
+  private config: LiquidityBotConfig;
+  private recentVolatility: number = 0;
+
+  constructor(id: string, inventoryParams: InventoryConfig, simConfig: Partial<SimConfig> = { minimumSpreadCurrency: 0.01 }, botConfig: Partial<LiquidityBotConfig> = {}) {
+    super(id, inventoryParams, simConfig);
+    this.config = {
+      baseSpread: 0.005,
+      maxSpread: 0.02,
+      targetInventory: 0,
+      maxInventoryDeviation: 100,
+      inventorySkewFactor: 0.0001, // 0.01% price adjustment per share
+      volatilityWindow: 20,
+      minOrderValue: 10,
+      rebalanceThreshold: 0.7,
+      ...botConfig
+    };
+  }
+
+  private updateVolatility(priceHistory: number[]): void {
+    if (priceHistory.length < 2) {
+      this.recentVolatility = 0;
+      return;
+    }
+
+    const window = Math.min(this.config.volatilityWindow, priceHistory.length);
+    const recentPrices = priceHistory.slice(-window);
+
+    // Calculate returns
+    const returns = recentPrices.slice(1).map((price, i) => {
+      const pastPrice = recentPrices[i];
+      if(!pastPrice) return 0;
+      return (price - pastPrice) / pastPrice;
+    });
+    
+    // Standard deviation of returns
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
+    this.recentVolatility = Math.sqrt(variance);
+  }
+
+  private calculatePrices(currentPrice: number, inventoryRatio: number): {
+    bidPrice: number;
+    askPrice: number;
+    effectiveSpread: number;
+  } {
+    // Dynamic spread based on volatility (wider in volatile markets)
+    const volatilityMultiplier = 1 + (this.recentVolatility * 100); // Scale volatility impact
+    let effectiveSpread = Math.min(
+      this.config.baseSpread * volatilityMultiplier,
+      this.config.maxSpread
+    );
+
+    // Inventory skew: shift both bid and ask in the same direction
+    // If we have too many shares (positive inventoryRatio), we want to:
+    // - Lower both bid and ask to encourage selling
+    // If we have too few shares (negative inventoryRatio), we want to:
+    // - Raise both bid and ask to encourage buying
+    const skew = -inventoryRatio * this.config.inventorySkewFactor * currentPrice;
+
+    // Calculate bid/ask with skew
+    const halfSpread = (effectiveSpread * currentPrice) / 2;
+    let bidPrice = currentPrice - halfSpread + skew;
+    let askPrice = currentPrice + halfSpread + skew;
+
+    // Ensure minimum spread
+    const minSpread = this.simConfig.minimumSpreadCurrency || 0.01;
+    if (askPrice - bidPrice < minSpread) {
+      const midpoint = (bidPrice + askPrice) / 2;
+      bidPrice = midpoint - minSpread / 2;
+      askPrice = midpoint + minSpread / 2;
+    }
+
+    return { bidPrice, askPrice, effectiveSpread };
+  }
+
+  private manageOrders(
+    bidPrice: number,
+    askPrice: number,
+    snapshot: Snapshot,
+    simulator: Simulator,
+    inventoryRatio: number
+  ): void {
+    // Adjust order sizes based on inventory
+    // If we're long (positive ratio), place smaller buys and larger sells
+    // If we're short (negative ratio), place larger buys and smaller sells
+    const buySize = this.orderSize * (1 - inventoryRatio * 0.5);
+    const sellSize = this.orderSize * (1 + inventoryRatio * 0.5);
+
+    // Place buy orders if we have capacity
+    const hasBuyOrders = this.hasBuyOrders(snapshot, bidPrice);
+    const canBuy = this.availableCash >= bidPrice * buySize + this.config.minOrderValue;
+    
+    if (!hasBuyOrders && canBuy && buySize > 0) {
+      this.placeBuyOrder(simulator, bidPrice, Math.floor(buySize));
+    }
+
+    // Place sell orders if we have shares
+    const hasSellOrders = this.hasSellOrders(snapshot, askPrice);
+    const canSell = this.shares >= sellSize;
+    
+    if (!hasSellOrders && canSell && sellSize > 0) {
+      this.placeSellOrder(simulator, askPrice, Math.floor(sellSize));
+    }
+  }
+
+  private handleInventoryRisk(
+    currentPrice: number,
+    inventoryDeviation: number,
+    simulator: Simulator,
+    snapshot: Snapshot
+  ): void {
+    // Aggressive rebalancing when inventory is too extreme
+    if (inventoryDeviation > 0) {
+      // Too many shares - aggressively sell
+      const sellPrice = currentPrice * (1 - this.config.baseSpread * 2); // Wider discount
+      const sellQuantity = Math.min(this.shares, Math.floor(Math.abs(inventoryDeviation) / 2));
+      
+      if (!this.hasSellOrders(snapshot, sellPrice) && sellQuantity > 0) {
+        this.placeSellOrder(simulator, sellPrice, sellQuantity);
+      }
+    } else {
+      // Too few shares - aggressively buy
+      const buyPrice = currentPrice * (1 + this.config.baseSpread * 2); // Willing to pay more
+      const buyQuantity = Math.floor(Math.abs(inventoryDeviation) / 2);
+      const buyValue = buyPrice * buyQuantity;
+      
+      if (!this.hasBuyOrders(snapshot, buyPrice) && this.availableCash >= buyValue) {
+        this.placeBuyOrder(simulator, buyPrice, buyQuantity);
+      }
+    }
+  }
+
+  private shouldTrade(currentPrice: number): boolean {
+    // Add any pre-trade checks here
+    // For example, don't trade if price is too low/high, or if we're in a bad state
+    return currentPrice > 0 && (this.availableCash > 0 || this.shares > 0);
+  }
+
+  // Helper method for debugging/monitoring
+  getStatus(): {
+    inventoryDeviation: number;
+    inventoryRatio: number;
+    volatility: number;
+    isAtRisk: boolean;
+  } {
+    const inventoryDeviation = this.shares - this.config.targetInventory;
+    const inventoryRatio = inventoryDeviation / this.config.maxInventoryDeviation;
+    
+    return {
+      inventoryDeviation,
+      inventoryRatio,
+      volatility: this.recentVolatility,
+      isAtRisk: Math.abs(inventoryDeviation) > this.config.maxInventoryDeviation
+    };
+  }
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot: Snapshot): void {
+    if (!currentPrice || !this.shouldTrade(currentPrice)) return;
+
+    // Update market conditions
+    this.updateVolatility(priceHistory);
+    
+    // Calculate inventory position
+    const inventoryDeviation = this.shares - this.config.targetInventory;
+    const inventoryRatio = inventoryDeviation / this.config.maxInventoryDeviation;
+    
+    // Check if we're in dangerous inventory territory
+    if (Math.abs(inventoryDeviation) > this.config.maxInventoryDeviation) {
+      this.handleInventoryRisk(currentPrice, inventoryDeviation, simulator, snapshot);
+      return;
+    }
+
+    // Calculate dynamic spread and skewed prices
+    const { bidPrice, askPrice, effectiveSpread } = this.calculatePrices(
+      currentPrice, 
+      inventoryRatio
+    );
+
+    // Place orders with inventory awareness
+    this.manageOrders(bidPrice, askPrice, snapshot, simulator, inventoryRatio);
+  }
+}
+
+// Random Bot - makes random trades
+class RandomBot extends TradingBot {
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): void {
+    const action = this.random();
+
+    if(!currentPrice) return;
+    
+    
+    const purchaseType = this.random() > 0.5 ? 'market' : 'limit';
+    const priceVariance = 0.98 + this.random() * 0.04; // 98% to 102%
+
+    let price = 0
+    if(purchaseType === 'limit'){
+      if(priceVariance < 100){
+        if(currentPrice * priceVariance > currentPrice - this.simConfig.minimumSpreadCurrency){
+          price = currentPrice * priceVariance
+        }else{
+          price = currentPrice - this.simConfig.minimumSpreadCurrency
+        }
+      }else{
+        if(currentPrice * priceVariance < currentPrice + this.simConfig.minimumSpreadCurrency){
+          price = currentPrice * priceVariance
+        }else{
+          price = currentPrice + this.simConfig.minimumSpreadCurrency
+        }
+      }
+    }else {
+      price = currentPrice;
+    }
+
+    if (action > 0.9) {
+      // Random buy
+      const quantity = this.orderSize
+      if (quantity > 0) {
+        this.placeBuyOrder(simulator, price, quantity,purchaseType);
+      }
+    } else if (action < 0.1 && this.shares > 0) {
+      // Random sell
+      const quantity = this.shares > this.orderSize ? this.orderSize : this.shares;
+      if (quantity > 0) {
+        this.placeSellOrder(simulator, price, quantity,purchaseType);
+      }
+    }
+  }
+}
+
+
+export { TradingBot,InformedBot,LiquidityBot, MomentumBot, MeanReversionBot, RandomBot };
+
+
+export const computePriceChange = (currentPrice:number, minStep:number, changeUp:number, changeDown:number) => {
+    const upChange = priceTwoDecimal(currentPrice * (1+changeUp),true);
+    const downChange = priceTwoDecimal(currentPrice * (1-changeDown),false);
+
+    const minPriceUp = currentPrice + (minStep || 0);
+    const minPriceDown = currentPrice - (minStep || 0);
+    const upPrice: number = upChange < minPriceUp ? minPriceUp : upChange
+    const downPrice: number = downChange > minPriceDown ? minPriceDown : downChange
+  // console.log(`Price change computed: Up to $${upPrice.toFixed(2)}, Down to $${downPrice.toFixed(2)} ${changeDown}`);
+    return {upPrice, downPrice};
+}
+
