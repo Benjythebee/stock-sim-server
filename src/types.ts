@@ -16,7 +16,9 @@ export enum MessageType {
     STOCK_ACTION = 10,
     STOCK_MOVEMENT = 11,
     PORTFOLIO_UPDATE = 12,
-    ADMIN_SETTINGS = 30
+    SHOCK = 13,
+    ADMIN_SETTINGS = 30,
+    DEBUG_PRICES=99,
 }
 
 
@@ -36,9 +38,16 @@ type IsAdminMessage = {
     type: MessageType.IS_ADMIN;
 }
 
+type IsShockMessage = {
+    type: MessageType.SHOCK;
+    target: 'intrinsic' | 'market'
+}
+
 type RoomStateMessage = {
     type: MessageType.ROOM_STATE;
     paused: boolean;
+    started: boolean;
+    ended: boolean;
     settings: GameSettings;
     roomId: string;
     clock: number;
@@ -100,8 +109,14 @@ type StockMovementMessage = {
     depth: [[number, number][], [number, number][]]
 }
 
-export type Message = JoinMessage | LeaveMessage | RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage;
+type DebugPricesMessage = {
+    type: MessageType.DEBUG_PRICES;
+    intrinsicValue: number;
+    guidePrice: number;
+}
 
+
+export type Message = JoinMessage | LeaveMessage | IsShockMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage;
 export type {
     JoinMessage,
     LeaveMessage,
@@ -116,5 +131,7 @@ export type {
     StockMessage,
     AdminSettingMessage,
     PortfolioUpdateMessage,
-    StockMovementMessage
+    StockMovementMessage,
+    DebugPricesMessage,
+    IsShockMessage
 }

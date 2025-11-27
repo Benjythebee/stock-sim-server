@@ -56,10 +56,11 @@ export class Simulator {
         this.generator = generator;
         
         this.clockInterval = setInterval(() => this.clockTick(), 5000);
-        this.tickInterval = setInterval(() => this.tick(), 200);
+        this.tickInterval = setInterval(() => this.tick(), 1000);
     }
 
     onPrice = undefined as ((price: number) => void) | undefined;
+    onDebugPrices = undefined as ((prices: {intrinsicValue: number; guidePrice: number}) => void) | undefined;
     onClockTick = undefined as ((clock: number) => void) | undefined;
     onEnd = undefined as (() => void) | undefined;
 
@@ -96,8 +97,8 @@ export class Simulator {
         for(let i=0;i<count;i++){
             const BotClass = botClasses[Math.floor(random() * random() * botClasses.length)]!;
             const bot = new BotClass(`Bot${i}`, {
-                initialCash: 10000,
-                initialShares: Math.floor(random()*1000),
+                initialCash: Infinity, // inifinite cash for bots
+                initialShares: Math.floor(random()*10000),
                 orderSize: Math.floor(random()*10) + 1,
                 seed:this.settings.seed
             });
@@ -106,27 +107,40 @@ export class Simulator {
         return this.bots;
     }
 
+    get marketPrice() {
+        return this.orderBookW.orderBook.marketPrice || this.settings.initialPrice;
+    }
+
 
     tick() {
         if(this._paused) return;
         this.generateCachedSnapshot();
 
         const {intrinsicValue,guidePrice} = this.generator.tick();
-        let updatedPrice = this.orderBookW.orderBook.marketPrice || guidePrice;
-        this.onPrice?.(updatedPrice);
         // console.log(`New guide price: ${guidePrice.toFixed(2)} ${guidePrice < intrinsicValue ? '<' : '>'} ${intrinsicValue.toFixed(2)}`);
 
-        let lastPrice = updatedPrice;
+        let lastPrice = this.marketPrice;
+        let updatedPrice = guidePrice;
         this.bots.forEach(bot => {
-            bot.makeDecision(updatedPrice,this.generator.history,this,this.snapshot,intrinsicValue)
-            updatedPrice = this.orderBookW.orderBook.marketPrice || updatedPrice;
-            // console.log('updated price:',updatedPrice);
-            this.generator.setMarketPrice(updatedPrice)
-            if(updatedPrice !== lastPrice){
-                this.onPrice?.(updatedPrice);
-                lastPrice = updatedPrice;
+            // Should the bot cancel existing orders?
+            // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
+
+            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,guidePrice)){
+                updatedPrice = this.marketPrice;
+                // console.log('updated price:',updatedPrice);
+                // this.generator.setMarketPrice(updatedPrice)
+                if(updatedPrice !== lastPrice){
+                    this.onPrice?.(updatedPrice);
+                    lastPrice = updatedPrice;
+                }
             }
         });
+
+
+        this.onDebugPrices({
+            intrinsicValue,
+            guidePrice,
+        })
     }
 
 }

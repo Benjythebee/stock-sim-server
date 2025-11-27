@@ -33,7 +33,8 @@ export class Room {
         ticketName: 'AAPL',
     }
     state: {
-        paused: boolean;
+        started: boolean;
+        ended: boolean;
     }
 
     adminClient: Client | null = null;
@@ -43,7 +44,8 @@ export class Room {
         this.clientMap = new Map();
         this.orderBook = new OrderBook();
         this.state = {
-            paused: true,
+            started: false,
+            ended: false,
         }
 
         this.randomGenerator = new SeededRandomGenerator(this.settings.seed);
@@ -68,15 +70,28 @@ export class Room {
         });
 
         this.simulator!.onPrice = (price)=>{
+            if(!price || typeof price !== 'number'){
+                console.warn("No price generated in room", this.roomId,price);
+                return;
+            }
             const depth = this.simulator!.orderBookW.orderBook.depth();
             this.sendToAll({type: MessageType.STOCK_MOVEMENT, price, depth});
         }
+        this.simulator.onDebugPrices = (prices)=>{
+            if(!prices || typeof prices !== 'object'){
+                console.warn("No prices generated in room", this.roomId,prices);
+                return;
+            }
+            this.sendToAll({type: MessageType.DEBUG_PRICES, intrinsicValue: prices.intrinsicValue, guidePrice: prices.guidePrice});
+        }
+
         this.simulator.onClockTick = (clock)=>{
             this.sendToAll({type: MessageType.CLOCK, value: clock});
         }
 
         this.simulator.onEnd = ()=>{
             console.log("Game ended in room", this.roomId);
+            this.setState({ended:true});
         }
 
         if(this.settings.bots > 0){
@@ -102,7 +117,17 @@ export class Room {
     }
 
     get isPaused() {
-        return this.state.paused;
+        return !!this.simulator?._paused || true;
+    }
+    get isStarted() {
+        return this.state.started;
+    }
+    get isEnded() {
+        return this.state.ended;
+    }
+
+    setState = (state: Partial<typeof this.state>) => {
+        this.state = {...this.state, ...state};
     }
 
     togglePause= () => {
@@ -191,10 +216,13 @@ export class Room {
         
         const roomState = {
             paused: this.isPaused,
+            started: this.isStarted,
+            ended: this.isEnded,
             settings: this.settings,
             roomId: this.roomId,
             clock: this.simulator ? this.simulator.clock : 0,
             clients: this.clientMap.size,
+            price: this.simulator ? this.simulator.marketPrice : this.settings.openingPrice,
         }
 
         client.send({type:MessageType.ROOM_STATE, ...roomState} );

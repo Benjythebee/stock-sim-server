@@ -75,6 +75,15 @@ const server = Bun.serve<{roomId:string,id:string}>({
                     return;
                 }
 
+                if(msg.type === MessageType.SHOCK){
+                    if(msg.target === 'intrinsic'){
+                        room.simulator?.generator.intrinsicShock(room.randomGenerator.nextNormal()*3, 1);
+                        return;
+                    }
+                    room.simulator?.generator.shock(room.randomGenerator.nextNormal()*50)
+                    return;
+                }
+
                 if(msg.type === MessageType.ADMIN_SETTINGS){
                     if(!room.simulator || !room.isPaused){
                         room.adminClient?.send({type:MessageType.ERROR,message:"Game is not paused"});
@@ -82,6 +91,7 @@ const server = Bun.serve<{roomId:string,id:string}>({
                     }
                     room.setSettings(msg.settings);
                     room.setup()
+                    
                     room.clientMap.forEach(client=>{
                         room.sendRoomState(client);
                     })

@@ -9,6 +9,7 @@ export type InventoryConfig = {
   initialShares: number
   orderSize?: number
   seed?: number
+  cancelSpreadTresholdMultiplier?: number
  };
 type SimConfig = {
   minimumSpreadCurrency: number;
@@ -106,14 +107,16 @@ abstract class TradingBot extends TradingParticipant {
   
   ordersInStandby: Map<string, Order> = new Map();
 
-  constructor(id: string, {initialCash, initialShares, orderSize}: Partial<InventoryConfig> = {
+  constructor(id: string, {initialCash, initialShares, orderSize,  cancelSpreadTresholdMultiplier}: Partial<InventoryConfig> = {
     initialCash: 10000,
     initialShares: 0,
-    orderSize: 10
+    orderSize: 10,
+    cancelSpreadTresholdMultiplier:2
   }, simConfig:Partial<SimConfig> = {minimumSpreadCurrency: 0.01}, debug: boolean = false) {
     super(id, {initialCash, initialShares});
     this.orderSize = orderSize || (Math.floor(this.random() * 20) + 5); // Default order size between 5 and 25
     this.debug = debug;
+    this._cancelSpreadTresholdMultiplier = cancelSpreadTresholdMultiplier || 2;
 
     if (debug) {
       console.log(`Bot ${this.id} initialized with $${this.availableCash}`);
@@ -160,8 +163,9 @@ abstract class TradingBot extends TradingParticipant {
     priceHistory: number[], 
     simulator: Simulator,
     snapshot: Snapshot,
+    intrinsicPrice?: number,
     guidePrice?: number
-  ): void;
+  ): boolean;
 
   protected placeBuyOrder(simulator: Simulator, price: number, quantity: number, type: 'market' | 'limit' = 'limit'): void {
     const cost = price * quantity;
@@ -243,6 +247,45 @@ abstract class TradingBot extends TradingParticipant {
     return this.availableCash + (this.shares * currentPrice);
   }
 
+  cancelOrder(order:Order,simulator: Simulator): void {
+    let canceled = simulator.orderBookW.orderBook.cancel(order.id);
+
+    if(!canceled) return;
+    if(order.side === Side.BUY){
+      // Buy order canceled
+      this._lockedCash -= canceled.order.price * canceled.order.size;
+      this.availableCash += canceled.order.price * canceled.order.size;
+    }else {
+      // Sell order canceled
+      this._lockedShares -= canceled.order.size;
+      this.shares += canceled.order.size;
+    }
+    console.log(`Bot ${this.constructor.name} canceled order: ${order.id}`);
+  }
+
+  protected _cancelSpreadTresholdMultiplier=5;
+  shouldCancelOrders(currentPrice: number, simulator: Simulator, snapshot?:Snapshot, guidePrice?: number,intrinsicValue?: number): void {
+    if(!currentPrice) return ;
+    if(!guidePrice) return ;
+
+    const orders = simulator.orderBookW.orderByIDs.get(this.id);
+
+    const threshold = this.simConfig.minimumSpreadCurrency *this._cancelSpreadTresholdMultiplier
+
+    if(!orders) return;
+    orders.forEach((orderList)=>{
+      orderList.forEach((orderArray)=>{
+        orderArray.forEach((order)=>{
+          const spread = Math.abs(currentPrice - order.price);
+          console.log(currentPrice,order.price,spread,threshold)
+          if(spread > threshold){
+            this.cancelOrder(order,simulator);
+          }
+        })
+      })
+    })
+
+  }
 }
 
 // Momentum Bot - buys when price is rising, sells when falling
@@ -252,17 +295,17 @@ class MomentumBot extends TradingBot {
   constructor(id: string,  inventoryParams:InventoryConfig, simConfig:Partial<SimConfig> = {minimumSpreadCurrency: 0.01}, lookbackPeriod = 5) {
     super(id, inventoryParams, simConfig);
     this.lookbackPeriod = lookbackPeriod;
+    this._cancelSpreadTresholdMultiplier = inventoryParams.cancelSpreadTresholdMultiplier || 10;
   }
 
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): void {
-    if(!currentPrice) return;
-    if(priceHistory.length < 2) return;
-    if (priceHistory.length < this.lookbackPeriod + 1) return;
-
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot,intrinsicPrice?: number,guidePrice?: number): boolean {
+    if(!currentPrice) return false;
+    if(priceHistory.length < 2) return false;
+    if (priceHistory.length < this.lookbackPeriod + 1) return false;
     const recentPrices = priceHistory.slice(-this.lookbackPeriod - 1);
     const pastPriceTMinus1 = recentPrices[recentPrices.length - 1]
     const currentPriceT0 = recentPrices[0]
-    if(typeof pastPriceTMinus1 !== 'number' || typeof currentPriceT0 !== 'number') return;
+    if(typeof pastPriceTMinus1 !== 'number' || typeof currentPriceT0 !== 'number') return false;
     const momentum = (pastPriceTMinus1 - currentPriceT0) / currentPriceT0
 
     const priceChange = computePriceChange(currentPrice,this.simConfig.minimumSpreadCurrency,0.001,0.001)
@@ -275,9 +318,10 @@ class MomentumBot extends TradingBot {
       // cleanup old orders
       this.autoCancelOldOrders(simulator, Side.BUY, 5000);
       if (quantity > 0) {
-        if(this.hasBuyOrders(snapshot,priceBuy)) return;
+        if(this.hasBuyOrders(snapshot,priceBuy)) return false;
 
         this.placeBuyOrder(simulator, priceBuy, quantity);
+        return true;
       }
     } else if (momentum < -0.01 && this.shares > 0 && this.random() > 0.7) {
       // Negative momentum - sell
@@ -285,10 +329,12 @@ class MomentumBot extends TradingBot {
       this.autoCancelOldOrders(simulator, Side.SELL, 5000);
       const quantity = this.orderSize
       if (quantity > 0) {
-        if(this.hasSellOrders(snapshot,priceSell)) return;
+        if(this.hasSellOrders(snapshot,priceSell)) return false;
         this.placeSellOrder(simulator, priceSell, quantity);
+        return true;
       }
     }
+    return false;
   }
 }
 
@@ -301,10 +347,10 @@ class MeanReversionBot extends TradingBot {
     this.lookbackPeriod = lookbackPeriod;
   }
 
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot, guidePrice?: number): void {
-    if(!currentPrice) return;
-    if(priceHistory.length < 2) return;
-    if (priceHistory.length < this.lookbackPeriod) return;
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): boolean {
+    if(!currentPrice) return false;
+    if(priceHistory.length < 2) return false;
+    if (priceHistory.length < this.lookbackPeriod) return false;
 
     const average = priceHistory.slice(-this.lookbackPeriod).reduce((sum, price) => sum + price, 0) / this.lookbackPeriod;
 
@@ -317,8 +363,9 @@ class MeanReversionBot extends TradingBot {
             // cleanup old orders
       this.autoCancelOldOrders(simulator, Side.BUY, 5000);
       if (quantity > 0) {
-        if(this.hasBuyOrders(snapshot,priceChange.upPrice)) return;
+        if(this.hasBuyOrders(snapshot,priceChange.upPrice)) return false;
         this.placeBuyOrder(simulator, priceChange.upPrice, quantity);
+        return true;
       }
     } else if (currentPrice > average * 1.02 && this.shares > 0 && this.random() > 0.5) {
       // cleanup old orders
@@ -326,11 +373,12 @@ class MeanReversionBot extends TradingBot {
       // Price significantly above guide - sell
       const quantity = this.orderSize;
       if (quantity > 0) {
-        if(this.hasSellOrders(snapshot,priceChange.downPrice)) return;
+        if(this.hasSellOrders(snapshot,priceChange.downPrice)) return false;
         this.placeSellOrder(simulator, priceChange.downPrice, quantity);
+        return true;
       }
     }
-  
+    return false;
   }
 }
 
@@ -340,24 +388,51 @@ class InformedBot extends TradingBot {
   constructor(id: string, inventoryParams: InventoryConfig, simConfig: Partial<SimConfig> = { minimumSpreadCurrency: 0.01 }, lookbackPeriod = 20) {
     super(id, inventoryParams, simConfig);
     this.lookbackPeriod = lookbackPeriod;
+    this._cancelSpreadTresholdMultiplier = inventoryParams.cancelSpreadTresholdMultiplier || 10;
   }
 
+  override shouldCancelOrders(currentPrice: number, simulator: Simulator, snapshot?: Snapshot, guidePrice?: number,intrinsicValue?: number): void {
+    // Informed bot does not cancel orders if it has an advantage
+    if(!currentPrice) return ;
+    if(!guidePrice) return ;
+    if(!intrinsicValue) return ;
 
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator,snapshot:Snapshot, intrinsicValue?: number): void {
-    if(!currentPrice) return;
-    if(priceHistory.length < 2) return;
-    if (priceHistory.length < this.lookbackPeriod) return;
+    const orders = simulator.orderBookW.orderByIDs.get(this.id);
+
+    if(!orders) return;
+    orders.forEach((orderList)=>{
+      orderList.forEach((orderArray)=>{
+        orderArray.forEach((order)=>{
+
+          if( (intrinsicValue > currentPrice && order.side === Side.BUY) ||
+              (intrinsicValue < currentPrice && order.side === Side.SELL)
+          ){
+            // Advantageous order - do not cancel
+            return;
+          }
+
+          this.cancelOrder(order,simulator);
+        })
+      })
+    })
+  }
+
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator,snapshot:Snapshot, intrinsicValue?: number): boolean {
+    if(!currentPrice) return false;
+    if(priceHistory.length < 2) return false;
+    if (priceHistory.length < this.lookbackPeriod) return false;
 
     if (typeof intrinsicValue !== 'number') {
-      return;
+      return false;
     }
     
     if(currentPrice < (intrinsicValue - this.simConfig.minimumSpreadCurrency*1.05)){
       this.autoCancelOldOrders(simulator, Side.BUY, 5000);
       // cleanup old orders
       if (this.availableCash > currentPrice * this.orderSize) {
-        if(this.hasBuyOrders(snapshot,currentPrice)) return;
+        if(this.hasBuyOrders(snapshot,currentPrice)) return false;
         this.placeBuyOrder(simulator, currentPrice, this.orderSize,'market');
+        return true;
       }
     }
 
@@ -365,11 +440,12 @@ class InformedBot extends TradingBot {
       this.autoCancelOldOrders(simulator, Side.SELL, 5000);
 
       if (this.shares >= this.orderSize) {
-        if(this.hasSellOrders(snapshot,currentPrice)) return;
+        if(this.hasSellOrders(snapshot,currentPrice)) return false;
         this.placeSellOrder(simulator, currentPrice, this.orderSize,'market');
+        return true;
       }
     }
-  
+    return false;
   }
 }
 interface LiquidityBotConfig {
@@ -400,6 +476,7 @@ class LiquidityBot extends TradingBot {
       rebalanceThreshold: 0.7,
       ...botConfig
     };
+    this._cancelSpreadTresholdMultiplier = inventoryParams.cancelSpreadTresholdMultiplier || 5;
   }
 
   private updateVolatility(priceHistory: number[]): void {
@@ -539,8 +616,8 @@ class LiquidityBot extends TradingBot {
       isAtRisk: Math.abs(inventoryDeviation) > this.config.maxInventoryDeviation
     };
   }
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot: Snapshot): void {
-    if (!currentPrice || !this.shouldTrade(currentPrice)) return;
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot: Snapshot): boolean {
+    if (!currentPrice || !this.shouldTrade(currentPrice)) return false;
 
     // Update market conditions
     this.updateVolatility(priceHistory);
@@ -552,7 +629,7 @@ class LiquidityBot extends TradingBot {
     // Check if we're in dangerous inventory territory
     if (Math.abs(inventoryDeviation) > this.config.maxInventoryDeviation) {
       this.handleInventoryRisk(currentPrice, inventoryDeviation, simulator, snapshot);
-      return;
+      return false;
     }
 
     // Calculate dynamic spread and skewed prices
@@ -563,16 +640,30 @@ class LiquidityBot extends TradingBot {
 
     // Place orders with inventory awareness
     this.manageOrders(bidPrice, askPrice, snapshot, simulator, inventoryRatio);
+    return true;
   }
 }
 
 // Random Bot - makes random trades
 class RandomBot extends TradingBot {
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): void {
+
+
+  override shouldCancelOrders(currentPrice: number, simulator: Simulator, snapshot?: Snapshot, guidePrice?: number): void {
+    if(this.random() > 0.97){
+      const map =simulator.orderBookW.orderByIDs.get(this.id)
+      if(!map) return;
+      const orderList = map[this.random() > 0.5 ? 0 : 1]?.get(this.random() * map[0].size);
+      if(!orderList) return;
+      const order = orderList[Math.floor(this.random() * orderList.length)];
+      if(!order) return;
+      this.cancelOrder(order,simulator);
+    }
+  }
+
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): boolean {
     const action = this.random();
 
-    if(!currentPrice) return;
-    
+    if(!currentPrice) return false;
     
     const purchaseType = this.random() > 0.5 ? 'market' : 'limit';
     const priceVariance = 0.98 + this.random() * 0.04; // 98% to 102%
@@ -601,14 +692,17 @@ class RandomBot extends TradingBot {
       const quantity = this.orderSize
       if (quantity > 0) {
         this.placeBuyOrder(simulator, price, quantity,purchaseType);
+        return true;
       }
     } else if (action < 0.1 && this.shares > 0) {
       // Random sell
       const quantity = this.shares > this.orderSize ? this.orderSize : this.shares;
       if (quantity > 0) {
         this.placeSellOrder(simulator, price, quantity,purchaseType);
+        return true;
       }
     }
+    return false;
   }
 }
 

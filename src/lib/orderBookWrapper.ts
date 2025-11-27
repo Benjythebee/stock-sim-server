@@ -24,6 +24,8 @@ export class OrderBookWrapper {
 
     lastOrderProcessed: {orderId:string, quantity: number, cost:number} | null = null;
 
+    totalValueProcessed: number = 0;
+
     constructor() {
         this.orderBook = new OrderBook();
 
@@ -82,6 +84,8 @@ export class OrderBookWrapper {
 
         const oPrice = 'price' in order? order.price : 'stopPrice' in order? order.stopPrice : 0;
         let p = priceFn(oPrice)
+
+        this.totalValueProcessed += order.size*oPrice
         
         const handler = (orders: Order[],price:number)=>{
             const clientId = order.id.split('-$-')[0];
@@ -105,6 +109,7 @@ export class OrderBookWrapper {
 
     private processPartialOrder=(order: ILimitOrder|null, partialQuantityProcessed: number|null) =>{
         if(!order) return;
+        // get client id from order id
         const cliendId = order.id.split('-$-')[0]!;
         if(typeof partialQuantityProcessed !== 'number') return;
         const o = this.orderByIDs.get(cliendId);
@@ -113,6 +118,8 @@ export class OrderBookWrapper {
         }
         const oSide = order.side==Side.BUY ? o[0] : o[1];
         let p = priceFn(order.price)
+
+        this.totalValueProcessed += partialQuantityProcessed * order.price
 
         const handler = (orders: Order[])=>{
             const clientId = order.id.split('-$-')[0];
@@ -247,6 +254,10 @@ export class OrderBookWrapper {
 
         return processed.quantityLeft
         // console.log(this.orderByIDs)
+    }
+
+    cancelOrder(id:string) {
+        this.orderBook.cancel(id);
     }
 }
 
