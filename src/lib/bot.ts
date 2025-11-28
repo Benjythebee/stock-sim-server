@@ -308,13 +308,13 @@ class MomentumBot extends TradingBot {
     if(typeof pastPriceTMinus1 !== 'number' || typeof currentPriceT0 !== 'number') return false;
     const momentum = (pastPriceTMinus1 - currentPriceT0) / currentPriceT0
 
-    const priceChange = computePriceChange(currentPrice,this.simConfig.minimumSpreadCurrency,0.001,0.001)
+    const priceChange = computePriceChange(guidePrice||currentPrice,this.simConfig.minimumSpreadCurrency,0.001,0.001)
     const priceBuy = priceChange.upPrice;
     const priceSell = priceChange.downPrice;
     
     if (momentum > 0.01 && this.random() > 0.7) {
       // Positive momentum - buy
-      const quantity = Math.floor(this.orderSize / currentPrice);
+      const quantity = Math.floor(this.orderSize / (guidePrice||currentPrice));
       // cleanup old orders
       this.autoCancelOldOrders(simulator, Side.BUY, 5000);
       if (quantity > 0) {
@@ -347,19 +347,19 @@ class MeanReversionBot extends TradingBot {
     this.lookbackPeriod = lookbackPeriod;
   }
 
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot): boolean {
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot:Snapshot,intrinsicPrice?:number,guidePrice?: number): boolean {
     if(!currentPrice) return false;
     if(priceHistory.length < 2) return false;
     if (priceHistory.length < this.lookbackPeriod) return false;
 
     const average = priceHistory.slice(-this.lookbackPeriod).reduce((sum, price) => sum + price, 0) / this.lookbackPeriod;
 
-    const priceChange = computePriceChange(currentPrice,this.simConfig.minimumSpreadCurrency,0.005,0.005)
+    const priceChange = computePriceChange((guidePrice||currentPrice),this.simConfig.minimumSpreadCurrency,0.005,0.005)
 
     // Use guide price to adjust mean reversion threshold
-    if (currentPrice < average * 0.98 && this.random() > 0.5) {
+    if ((guidePrice||currentPrice) < average * 0.98 && this.random() > 0.5) {
       // Price significantly below guide - buy
-      const quantity = Math.floor(this.orderSize / currentPrice);
+      const quantity = Math.floor(this.orderSize / (guidePrice||currentPrice));
             // cleanup old orders
       this.autoCancelOldOrders(simulator, Side.BUY, 5000);
       if (quantity > 0) {
@@ -616,7 +616,7 @@ class LiquidityBot extends TradingBot {
       isAtRisk: Math.abs(inventoryDeviation) > this.config.maxInventoryDeviation
     };
   }
-  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot: Snapshot): boolean {
+  makeDecision(currentPrice: number, priceHistory: number[], simulator: Simulator, snapshot: Snapshot, intrinsicValue?: number,guidePrice?: number): boolean {
     if (!currentPrice || !this.shouldTrade(currentPrice)) return false;
 
     // Update market conditions
@@ -634,7 +634,7 @@ class LiquidityBot extends TradingBot {
 
     // Calculate dynamic spread and skewed prices
     const { bidPrice, askPrice, effectiveSpread } = this.calculatePrices(
-      currentPrice, 
+      guidePrice|| currentPrice, 
       inventoryRatio
     );
 
@@ -648,7 +648,7 @@ class LiquidityBot extends TradingBot {
 class RandomBot extends TradingBot {
 
 
-  override shouldCancelOrders(currentPrice: number, simulator: Simulator, snapshot?: Snapshot, guidePrice?: number): void {
+  override shouldCancelOrders(currentPrice: number, simulator: Simulator, snapshot?: Snapshot, intrinsicPrice?: number): void {
     if(this.random() > 0.97){
       const map =simulator.orderBookW.orderByIDs.get(this.id)
       if(!map) return;

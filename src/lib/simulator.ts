@@ -137,7 +137,7 @@ export class Simulator {
         });
 
 
-        this.onDebugPrices({
+        this.onDebugPrices?.({
             intrinsicValue,
             guidePrice,
         })
