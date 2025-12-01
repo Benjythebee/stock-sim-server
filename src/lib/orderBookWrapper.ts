@@ -273,6 +273,12 @@ export class OrderBookWrapper {
     cancelOrder(id:string) {
         this.orderBook.cancel(id);
     }
+
+    dispose() {
+        this.orderByIDs.clear();
+        this.observerMap.clear();
+        this.orderBook=null!
+    }
 }
 
 

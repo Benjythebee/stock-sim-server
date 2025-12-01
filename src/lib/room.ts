@@ -25,7 +25,7 @@ export class Room {
     time: number = 0;
     settings: GameSettings = {
         startingCash: 10000,
-        marketVolatility: 5,
+        marketVolatility: 0.05,
         seed: 42,
         openingPrice: 1,
         gameDuration: 5,
@@ -58,6 +58,7 @@ export class Room {
     setup() {
 
         if(this.simulator) {
+            this.simulator.dispose()
             this.simulator = null;
         }; // already set up
         this.randomGenerator = new SeededRandomGenerator(this.settings.seed);
@@ -65,8 +66,9 @@ export class Room {
             initialPrice: this.settings.openingPrice,
             seed: this.settings.seed,
             marketInfluence: 0.02,
+            marketVolatility: this.settings.marketVolatility,
             gameDuration: this.settings.gameDuration,
-            meanReversion: 0.05,
+            meanReversion: 0.03,
         });
 
         this.simulator!.onPrice = (price)=>{
@@ -86,7 +88,8 @@ export class Room {
         }
 
         this.simulator.onClockTick = (clock)=>{
-            this.sendToAll({type: MessageType.CLOCK, value: clock});
+            const timeLeft = Math.max(0, (this.settings.gameDuration * 60 * 1000) - (this.simulator!.totalTime));
+            this.sendToAll({type: MessageType.CLOCK, value: clock, timeLeft});
         }
 
         this.simulator.onEnd = ()=>{
@@ -95,6 +98,7 @@ export class Room {
             this.sendToAll({
                 type: MessageType.GAME_CONCLUSION, 
                 players: this.getClients().map(c=>({ name: c.name, ...c.portfolio})), 
+                bots: this.simulator!.bots.map((c)=>({ name:c.name, type: c.type, ...c.portfolio})),
                 volumeTraded: this.simulator!.orderBookW.totalValueProcessed,
                 highestPrice: this.simulator!.orderBookW.highestPrice,
                 lowestPrice: this.simulator!.orderBookW.lowestPrice
@@ -139,7 +143,16 @@ export class Room {
 
     togglePause= () => {
         if(!this.simulator) return;
+        if(this.isEnded) {
+            console.warn("Cannot toggle pause, game has ended in room", this.roomId);
+            return;
+        }
         if(this.isPaused){
+            if(!this.isStarted){
+                this.setState({started:true});
+                // set clock to now on game start
+                this.simulator.clock = Date.now();
+            }
             this.simulator.resume()
         }else if (!this.isPaused){
             this.simulator.pause()
@@ -156,6 +169,15 @@ export class Room {
 
         if('bots' in settings && settings.bots! > 50) {
             settings.bots = 50;
+        }
+        /**
+         * Transform market volatility from percentage to decimal
+         */
+        if(settings.marketVolatility !== undefined){
+            if(!settings.marketVolatility || isNaN(settings.marketVolatility)) settings.marketVolatility = 0.05;
+            if(settings.marketVolatility < 0.001) settings.marketVolatility = 0.001;
+            if(settings.marketVolatility > 100) settings.marketVolatility = 1;
+            settings.marketVolatility = settings.marketVolatility/100;
         }
 
         this.settings = {...this.settings, ...settings};

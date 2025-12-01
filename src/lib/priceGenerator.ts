@@ -254,6 +254,13 @@ class StockPriceGenerator {
     this.tickCount = 0;
     this.shockState = null;
   }
+
+  dispose(): void {
+    // Clean up resources if needed
+    this.reset();
+    this.priceHistory = [];
+    this.shockState = null;
+  }
 }
 
 export { StockPriceGenerator, type StockPriceConfig };

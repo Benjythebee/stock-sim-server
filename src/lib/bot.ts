@@ -103,6 +103,10 @@ export abstract class TradingParticipant {
 
 // Trading Bot Base Class
 abstract class TradingBot extends TradingParticipant {
+  /**
+   * Type of bot
+   */
+  type: string = 'TradingBot';
   protected debug: boolean;
   protected orderSize: number;
   simConfig:SimConfig
@@ -292,6 +296,10 @@ abstract class TradingBot extends TradingParticipant {
 
 // Momentum Bot - buys when price is rising, sells when falling
 class MomentumBot extends TradingBot {
+  /**
+   * Type of bot
+   */
+  override type: string = 'MomentumBot';
   private lookbackPeriod: number;
 
   constructor(id: string,  inventoryParams:InventoryConfig, simConfig:Partial<SimConfig> = {minimumSpreadCurrency: 0.01}, lookbackPeriod = 5) {
@@ -342,6 +350,10 @@ class MomentumBot extends TradingBot {
 
 // Mean Reversion Bot - buys when price is low, sells when high
 class MeanReversionBot extends TradingBot {
+  /**
+   * Type of bot
+   */
+  override type: string = 'MeanReversionBot';
   private lookbackPeriod: number;
 
   constructor(id: string, inventoryParams: InventoryConfig, simConfig: Partial<SimConfig> = { minimumSpreadCurrency: 0.01 }, lookbackPeriod = 20) {
@@ -385,6 +397,10 @@ class MeanReversionBot extends TradingBot {
 }
 
 class InformedBot extends TradingBot {
+  /**
+   * Type of bot
+   */
+  override type: string = 'InformedBot';
   private lookbackPeriod: number;
 
   constructor(id: string, inventoryParams: InventoryConfig, simConfig: Partial<SimConfig> = { minimumSpreadCurrency: 0.01 }, lookbackPeriod = 20) {
@@ -462,6 +478,11 @@ interface LiquidityBotConfig {
 }
 // Liquidity Bot - acts as a market maker by maintaining bid/ask spread
 class LiquidityBot extends TradingBot {
+  /**
+   * Type of bot
+   */
+  override type: string = 'LiquidityBot';
+
   private config: LiquidityBotConfig;
   private recentVolatility: number = 0;
 
@@ -648,7 +669,10 @@ class LiquidityBot extends TradingBot {
 
 // Random Bot - makes random trades
 class RandomBot extends TradingBot {
-
+    /**
+   * Type of bot
+   */
+  override type: string = 'RandomBot';
 
   override shouldCancelOrders(currentPrice: number, simulator: Simulator, snapshot?: Snapshot, intrinsicPrice?: number): void {
     if(this.random() > 0.97){

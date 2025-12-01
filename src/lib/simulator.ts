@@ -13,6 +13,7 @@ export type SimulatorSettings = {
         initialPrice: number,
         seed: number,
         gameDuration: number,
+        marketVolatility: number,
         marketInfluence: number,
         meanReversion: number,
     }
@@ -24,7 +25,7 @@ export class Simulator {
     /**
      * Total time elapsed in milliseconds
      */
-    private totalTime = 0;
+    public totalTime = 0;
     clock: number = Date.now();
     tickInterval: NodeJS.Timeout | null = null;
     clockInterval: NodeJS.Timeout | null = null;
@@ -39,24 +40,26 @@ export class Simulator {
             seed: 42,
             gameDuration: 5,
             marketInfluence: 0.02,
+            marketVolatility: 0.05,
             meanReversion: 0.05,
             ...settings
         };
-    
-        
+        console.log('Simulator settings:',this.settings);
         this.orderBookW = new OrderBookWrapper();
         const generator = new StockPriceGenerator({
             initialPrice: this.settings.initialPrice,
             drift: 0.0005,        // Slight upward trend
-            volatility: 0.02,     // 2% volatility
+            volatility: this.settings.marketVolatility,     // 2% volatility
             seed: this.settings.seed,
             marketInfluence: this.settings.marketInfluence,
             meanReversion: this.settings.meanReversion
         });
         this.generator = generator;
+
+        const clockTime = 2000; // 2 seconds
         
-        this.clockInterval = setInterval(() => this.clockTick(), 5000);
-        this.tickInterval = setInterval(() => this.tick(), 1000);
+        this.clockInterval = setInterval(() => this.clockTick(clockTime), clockTime);
+        this.tickInterval = setInterval(() => this.tick(), 200);
     }
 
     onPrice = undefined as ((price: number) => void) | undefined;
@@ -76,10 +79,10 @@ export class Simulator {
         return this.totalTime >= this.settings.gameDuration * 60 * 1000;
     }
 
-    private clockTick() {
+    private clockTick(clockTime: number = 1000) {
         if(this._paused) return;
-        this.clock += 1000;
-        this.totalTime += 1000;
+        this.clock += clockTime;
+        this.totalTime += clockTime;
         this.onClockTick?.(this.clock);
 
         if(this.ended()) {
@@ -118,7 +121,7 @@ export class Simulator {
         this.generateCachedSnapshot();
 
         const {intrinsicValue,guidePrice} = this.generator.tick();
-        // console.log(`New guide price: ${guidePrice.toFixed(2)} ${guidePrice < intrinsicValue ? '<' : '>'} ${intrinsicValue.toFixed(2)}`);
+        console.log(`New guide price: ${guidePrice.toFixed(2)} ${guidePrice < intrinsicValue ? '<' : '>'} ${intrinsicValue.toFixed(2)}`);
 
         let lastPrice = this.marketPrice;
         let updatedPrice = guidePrice;
@@ -142,6 +145,41 @@ export class Simulator {
             intrinsicValue,
             guidePrice,
         })
+    }
+
+
+    dispose() {
+        if(this.tickInterval){
+            clearInterval(this.tickInterval);
+            this.tickInterval = null;
+        }
+        if(this.clockInterval){
+            clearInterval(this.clockInterval);
+            this.clockInterval = null;
+        }
+        this.bots = [];
+        this._paused = true;
+        if(this.onEnd){
+            this.onEnd = undefined;
+        }
+        if(this.onPrice){
+            this.onPrice = undefined;
+        }
+        if(this.onClockTick){
+            this.onClockTick = undefined;
+        }
+        if(this.onDebugPrices){
+            this.onDebugPrices = undefined;
+        }
+        if(this.orderBookW){
+            this.orderBookW.dispose();
+            this.orderBookW = null!;
+        }
+
+        if(this.generator){
+            this.generator.dispose();
+            this.generator = null!;
+        }
     }
 
 }
