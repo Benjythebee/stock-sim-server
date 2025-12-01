@@ -18,6 +18,7 @@ export enum MessageType {
     PORTFOLIO_UPDATE = 12,
     SHOCK = 13,
     ADMIN_SETTINGS = 30,
+    GAME_CONCLUSION = 60,
     DEBUG_PRICES=99,
 }
 
@@ -25,6 +26,7 @@ export enum MessageType {
 type JoinMessage = {
     type: MessageType.JOIN;
     roomId: string;
+    username: string;
     id: string;
 }
 
@@ -92,6 +94,7 @@ type PortfolioUpdateMessage = {
     value: {
         cash: number;
         shares: number;
+        pnl: number;
     };
 }
 
@@ -114,9 +117,17 @@ type DebugPricesMessage = {
     intrinsicValue: number;
     guidePrice: number;
 }
+type ConclusionMessage = {
+    type: MessageType.GAME_CONCLUSION;
+    players: ({ name: string } & PortfolioUpdateMessage['value'])[];
+    volumeTraded: number;
+    highestPrice: number;
+    lowestPrice: number;
+}
 
 
-export type Message = JoinMessage | LeaveMessage | IsShockMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage;
+
+export type Message = JoinMessage | LeaveMessage | IsShockMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage;
 export type {
     JoinMessage,
     LeaveMessage,
@@ -133,5 +144,6 @@ export type {
     PortfolioUpdateMessage,
     StockMovementMessage,
     DebugPricesMessage,
-    IsShockMessage
+    IsShockMessage,
+    ConclusionMessage
 }

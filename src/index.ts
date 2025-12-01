@@ -2,7 +2,7 @@ import { parseJSON, parseMessageJson } from "./lib/parse";
 import roomManager from "./lib/roomManager";
 import { MessageType } from "./types";
 
-const server = Bun.serve<{roomId:string,id:string}>({
+const server = Bun.serve<{roomId:string,id:string,username:string}>({
     port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
     hostname:'localhost',
     // `routes` requires Bun v1.2.3+
@@ -12,10 +12,13 @@ const server = Bun.serve<{roomId:string,id:string}>({
         "/zhealth": new Response("OK"),
         '/ws/:roomId': (req) => {
             const cookies = req.headers.get("x-room-ws-id");
+            const searchParams = new URL(req.url).searchParams
             const userId = cookies ? cookies : crypto.randomUUID();
+            const username = searchParams.get("username") || crypto.randomUUID();
             req.cookies.set("x-room-ws-id", userId, {httpOnly:true, sameSite:"lax"});
+            req.cookies.set("x-room-ws-username", username, {httpOnly:true, sameSite:"lax"});
             if (server.upgrade(req,{
-                data:{roomId:(req.params as any).roomId,id:userId}
+                data:{roomId:(req.params as any).roomId,id:userId,username}
             })) {
                 return; 
             }
@@ -23,13 +26,14 @@ const server = Bun.serve<{roomId:string,id:string}>({
         }
     },
     websocket: {
-        data: {} as {roomId:string,id:string},
+        data: {} as {roomId:string,id:string,username:string},
         open: (ws) => {
 
             if(!ws.data) {
                 ws.data = {
                     roomId: crypto.randomUUID(),
-                    id: crypto.randomUUID()
+                    id: crypto.randomUUID(),
+                    username: crypto.randomUUID()
                 };
             }
 

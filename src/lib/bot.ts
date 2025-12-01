@@ -17,6 +17,7 @@ type SimConfig = {
 
 export abstract class TradingParticipant {
   public id: string;
+  public name: string = '';
   private initialCash: number;
   protected _lockedCash: number = 0;
   protected _lockedShares: number = 0;
@@ -33,6 +34,7 @@ export abstract class TradingParticipant {
   }) {
     this.randomGenerator = new SeededRandomGenerator(seed || 42);
     this.id = id;
+    this.name = id;
     this._availableCash = initialCash || 10000;
     this.initialCash = this._availableCash
     this._shares = initialShares || 0;
@@ -77,7 +79,7 @@ export abstract class TradingParticipant {
     this.onPortfolioUpdate?.(this.portfolio);
   }
 
-  onPortfolioUpdate: ((portfolio: { id:string, cash: number; shares: number }) => void) | undefined = undefined;
+  onPortfolioUpdate: ((portfolio: { id:string, cash: number; shares: number,pnl: number }) => void) | undefined = undefined;
 
   onOrderProcessed=(result:{orderId:string, quantity: number, cost:number})=>{
     if(!this.id.includes('Bot')){
@@ -94,8 +96,8 @@ export abstract class TradingParticipant {
     }
   }
 
-  get portfolio(): { id:string, profitLoss: number, cash: number; shares: number } {
-    return { id: this.id, profitLoss: this._profitLoss, cash: this.availableCash, shares: this.shares };
+  get portfolio(): { id:string, pnl: number, cash: number; shares: number } {
+    return { id: this.id, pnl: this._profitLoss, cash: this.availableCash, shares: this.shares };
   }
 }
 

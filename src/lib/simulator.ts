@@ -84,6 +84,7 @@ export class Simulator {
 
         if(this.ended()) {
             this.pause();
+            this.onEnd?.();
         }
     }
 

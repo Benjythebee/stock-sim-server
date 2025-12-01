@@ -92,6 +92,13 @@ export class Room {
         this.simulator.onEnd = ()=>{
             console.log("Game ended in room", this.roomId);
             this.setState({ended:true});
+            this.sendToAll({
+                type: MessageType.GAME_CONCLUSION, 
+                players: this.getClients().map(c=>({ name: c.name, ...c.portfolio})), 
+                volumeTraded: this.simulator!.orderBookW.totalValueProcessed,
+                highestPrice: this.simulator!.orderBookW.highestPrice,
+                lowestPrice: this.simulator!.orderBookW.lowestPrice
+            });
         }
 
         if(this.settings.bots > 0){
@@ -200,9 +207,14 @@ export class Room {
         }
     }
 
-    addClient(ws: ServerWebSocket) {
-        this.sendToAll({type:MessageType.JOIN, id:ws.data.id, roomId:this.roomId})
+    addClient(ws: Bun.ServerWebSocket<{
+        roomId: string;
+        id: string;
+        username: string;
+    }>) {
+        this.sendToAll({type:MessageType.JOIN, id:ws.data.id, username: ws.data.username, roomId:this.roomId})
         const client = new Client(ws, this);
+        client.name = ws.data.username || ws.data.id;
         this.clientMap.set(client.id, client);
         if(this.clientMap.size === 1){
             this.adminClient = client;

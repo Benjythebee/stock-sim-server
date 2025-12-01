@@ -17,24 +17,24 @@ export class OrderBookWrapper {
     orderBook: OrderBook;
 
     orderByIDs: Map<string, [Map<number, Order[]>, Map<number, Order[]>]> = new Map();
-    
-    cashPerClient: Map<string, number> = new Map();
-    
+     
     observerMap: Map<string, (x: {orderId:string, quantity: number, cost:number}) => void> = new Map();
 
     lastOrderProcessed: {orderId:string, quantity: number, cost:number} | null = null;
 
     totalValueProcessed: number = 0;
+    highestPrice: number = 0;
+    lowestPrice: number = 0;
 
     constructor() {
         this.orderBook = new OrderBook();
 
-        this.orderBook.limit({
-            id: 'dummy-sell',
-            side: Side.SELL,
-            price: 1,
-            size: 5
-        })
+        // this.orderBook.limit({
+        //     id: 'dummy-sell',
+        //     side: Side.SELL,
+        //     price: 1,
+        //     size: 5
+        // })
     }
 
     registerClientObserver(participant:TradingParticipant) {
@@ -87,6 +87,13 @@ export class OrderBookWrapper {
 
         this.totalValueProcessed += order.size*oPrice
         
+        if(oPrice > this.highestPrice) {
+            this.highestPrice = oPrice;
+        }
+        if(oPrice < this.lowestPrice) {
+            this.lowestPrice = oPrice;
+        }
+
         const handler = (orders: Order[],price:number)=>{
             const clientId = order.id.split('-$-')[0];
             const onOrderProcessed = this.observerMap.get(clientId!);
@@ -120,6 +127,13 @@ export class OrderBookWrapper {
         let p = priceFn(order.price)
 
         this.totalValueProcessed += partialQuantityProcessed * order.price
+
+        if(order.price > this.highestPrice) {
+            this.highestPrice = order.price;
+        }
+        if(order.price < this.lowestPrice) {
+            this.lowestPrice = order.price;
+        }
 
         const handler = (orders: Order[])=>{
             const clientId = order.id.split('-$-')[0];
