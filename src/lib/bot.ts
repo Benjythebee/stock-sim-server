@@ -23,7 +23,6 @@ export abstract class TradingParticipant {
   protected _lockedShares: number = 0;
   protected _availableCash: number;
   protected _shares: number
-  protected _profitLoss: number = 0;
 
   public randomGenerator: SeededRandomGenerator;
 
@@ -38,6 +37,10 @@ export abstract class TradingParticipant {
     this._availableCash = initialCash || 10000;
     this.initialCash = this._availableCash
     this._shares = initialShares || 0;
+  }
+
+  toString(){
+    return `TradingParticipant - ID: ${this.id}, Cash: $${this.availableCash.toFixed(2)}, Shares: ${this.shares}`;
   }
 
   random=()=>{
@@ -60,28 +63,26 @@ export abstract class TradingParticipant {
     return this._shares;
   }
 
-  get profitLoss(): number {
-    return this._profitLoss;
-  }
-
   setInitialCash (cash: number) {
     this.initialCash = cash;
   }
-
+  // Calculate total P&L including unrealized gains/losses from shares
+  getTotalProfitLoss(currentPrice: number): number {
+    const shareValue = this.shares * currentPrice;
+    const totalValue = this.availableCash + shareValue;
+    return totalValue - this.initialCash;
+  }
   set availableCash(value: number) {
     this._availableCash = value;
-    this._profitLoss = value - this.initialCash;
-    this.onPortfolioUpdate?.(this.portfolio);
   }
 
   set shares(value: number) {
     this._shares = value;
-    this.onPortfolioUpdate?.(this.portfolio);
   }
 
-  onPortfolioUpdate: ((portfolio: { id:string, cash: number; shares: number,pnl: number }) => void) | undefined = undefined;
+  onPortfolioUpdate: ((portfolio: { id:string, cash: number; shares: number,pnl?: number }, currentPrice?: number) => void) | undefined = undefined;
 
-  onOrderProcessed=(result:{orderId:string, quantity: number, cost:number})=>{
+  onOrderProcessed=(result:{orderId:string, price:number, quantity: number, cost:number})=>{
     if(!this.id.includes('Bot')){
       console.log(this.id ,result)
     }
@@ -94,10 +95,22 @@ export abstract class TradingParticipant {
       this.availableCash -= result.cost;
       this._lockedShares -= result.quantity;
     }
+
+    this.onPortfolioUpdate?.(this.portfolio);
   }
 
-  get portfolio(): { id:string, pnl: number, cash: number; shares: number } {
-    return { id: this.id, pnl: this._profitLoss, cash: this.availableCash, shares: this.shares };
+  get portfolio(): { id:string, cash: number; shares: number } {
+    return { id: this.id, cash: this.availableCash, shares: this.shares };
+  }
+
+  // Get portfolio with current market price for accurate P&L
+  getPortfolioWithPnL(currentPrice: number): { id:string, pnl: number, cash: number; shares: number } {
+    return { 
+      id: this.id, 
+      pnl: this.getTotalProfitLoss(currentPrice), 
+      cash: this.availableCash, 
+      shares: this.shares 
+    };
   }
 }
 
@@ -135,7 +148,9 @@ abstract class TradingBot extends TradingParticipant {
     
   }
 
-
+  override toString(): string {
+    return `TradingBot - Type: ${this.type}, ID: ${this.id}, Cash: $${this.availableCash.toFixed(2)}, Shares: ${this.shares}`;
+  }
 
   hasBuyOrders = (snapshot:Snapshot, price?:number) =>{
     if(price){
@@ -657,7 +672,7 @@ class LiquidityBot extends TradingBot {
 
     // Calculate dynamic spread and skewed prices
     const { bidPrice, askPrice, effectiveSpread } = this.calculatePrices(
-      guidePrice|| currentPrice, 
+      currentPrice, 
       inventoryRatio
     );
 
@@ -692,8 +707,15 @@ class RandomBot extends TradingBot {
     if(!currentPrice) return false;
     
     const purchaseType = this.random() > 0.5 ? 'market' : 'limit';
-    const priceVariance = 0.98 + this.random() * 0.04; // 98% to 102%
+    const priceVariance = 0.96 + this.random() * 0.08; // 96% to 104%
 
+    const map =simulator.orderBookW.orderByIDs.get(this.id)
+    const orderList = priceVariance < 1 ? map?.[1] : map?.[0];
+    const orderLength = orderList?.size || 0;
+    if(orderLength>5){
+      console.log(`RandomBot ${this.id} skipping trade - too many orders (${orderLength}) on this side`);
+      return false; // too many orders on this side
+    }
     let price = 0
     if(purchaseType === 'limit'){
       if(priceVariance < 100){

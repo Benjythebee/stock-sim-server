@@ -6,6 +6,7 @@ import type { RoomManager, ServerWebSocket } from "./roomManager";
 import { OrderBook } from 'nodejs-order-book'
 import { Simulator } from "./simulator";
 import { SeededRandomGenerator } from "./seededRandomGenerator";
+import { NewsFactory } from "./news/news";
 
 export type GameSettings = {
     startingCash: number;
@@ -13,6 +14,7 @@ export type GameSettings = {
     seed: number;
     marketVolatility: number; // percentage from 1 to 100
     gameDuration: number; // in minutes
+    enableRandomNews: boolean;
     bots: number;
     ticketName: string;
 }
@@ -22,11 +24,13 @@ export class Room {
     orderBook: OrderBook;
     randomGenerator: SeededRandomGenerator
     simulator: Simulator | null = null;
+    newsFactory: NewsFactory | null = null;
     time: number = 0;
     settings: GameSettings = {
         startingCash: 10000,
         marketVolatility: 0.05,
         seed: 42,
+        enableRandomNews: true,
         openingPrice: 1,
         gameDuration: 5,
         bots: 0,
@@ -97,8 +101,8 @@ export class Room {
             this.setState({ended:true});
             this.sendToAll({
                 type: MessageType.GAME_CONCLUSION, 
-                players: this.getClients().map(c=>({ name: c.name, ...c.portfolio})), 
-                bots: this.simulator!.bots.map((c)=>({ name:c.name, type: c.type, ...c.portfolio})),
+                players: this.getClients().map(c=>({ name: c.name, ...c.getPortfolioWithPnL(this.simulator?.marketPrice || 0)})), 
+                bots: this.simulator!.bots.map((c)=>({ name:c.name, type: c.type, ...c.getPortfolioWithPnL(this.simulator?.marketPrice || 0)})),
                 volumeTraded: this.simulator!.orderBookW.totalValueProcessed,
                 highestPrice: this.simulator!.orderBookW.highestPrice,
                 lowestPrice: this.simulator!.orderBookW.lowestPrice
@@ -110,7 +114,11 @@ export class Room {
             this.simulator.bots.forEach(bot=>{
                 this.simulator!.orderBookW.registerClientObserver(bot)
             })
+
+            console.log(`Created ${this.settings.bots} bots in room`, this.simulator.bots.map(b=>b.id));
         }
+
+        this.newsFactory = new NewsFactory(this, this.simulator!, this.settings.enableRandomNews);
 
         this.clientMap.forEach(client=>{
             client.updateClientInventory({
@@ -178,6 +186,27 @@ export class Room {
             if(settings.marketVolatility < 0.001) settings.marketVolatility = 0.001;
             if(settings.marketVolatility > 100) settings.marketVolatility = 1;
             settings.marketVolatility = settings.marketVolatility/100;
+        }
+
+        /**
+         * Clean other settings
+         */
+        if(settings.startingCash !== undefined){
+            if(!settings.startingCash || isNaN(settings.startingCash)) settings.startingCash = 10000;
+            if(settings.startingCash < 0) settings.startingCash = 0;
+            if(settings.startingCash > 999_999_999) settings.startingCash = 999_999_999;
+        }
+        
+        if(settings.gameDuration !== undefined){
+            if(!settings.gameDuration || isNaN(settings.gameDuration)) settings.gameDuration = 5;
+            if(settings.gameDuration < 1) settings.gameDuration = 1;
+            if(settings.gameDuration > 60) settings.gameDuration = 60;
+        }
+
+        if(settings.openingPrice !== undefined){
+            if(!settings.openingPrice || isNaN(settings.openingPrice)) settings.openingPrice = 1;
+            if(settings.openingPrice < 0.01) settings.openingPrice = 0.01;
+            if(settings.openingPrice > 10_000) settings.openingPrice = 10_000;
         }
 
         this.settings = {...this.settings, ...settings};

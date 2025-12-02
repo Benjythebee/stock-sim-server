@@ -76,12 +76,12 @@ class StockPriceGenerator {
         this.shockState = null;
       }
     }
-    console.log('additionalDrift:', additionalDrift, 'volatility:', this.volatility)
+    // console.log('additionalDrift:', additionalDrift, 'volatility:', this.volatility)
     // Apply additional drift to intrinsic value to get guide price
     const guidePriceChange = (additionalDrift - 0.5 * this.volatility ** 2) * dt 
     + this.volatility * Math.sqrt(dt) * this.random.nextNormal();
     
-    console.log('guidePriceChange:',this.intrinsicValue,guidePriceChange)
+    // console.log('guidePriceChange:',this.intrinsicValue,guidePriceChange)
     this.guidePrice = this.intrinsicValue * Math.exp(guidePriceChange);
     this.guidePrice = Math.max(this.guidePrice, 0.01);
     
@@ -89,7 +89,7 @@ class StockPriceGenerator {
     if (this.marketPrice === this.priceHistory[this.priceHistory.length - 1]) {
       this.marketPrice = this.guidePrice;
     }
-    console.log('Generated prices - Intrinsic:', this.intrinsicValue.toFixed(2), 'Guide:', this.guidePrice.toFixed(2), 'Market:', this.marketPrice.toFixed(2));
+    // console.log('Generated prices - Intrinsic:', this.intrinsicValue.toFixed(2), 'Guide:', this.guidePrice.toFixed(2), 'Market:', this.marketPrice.toFixed(2));
     return {
       intrinsicValue: priceTwoDecimal(this.intrinsicValue,true),
       guidePrice: priceTwoDecimal(this.guidePrice,true)
@@ -185,8 +185,12 @@ class StockPriceGenerator {
    * Apply a shock to the intrinsic price generation
    * @param size - Magnitude of shock (positive = upward shock, negative = downward)
    *               Typical range: -1 to 1, but can be larger for extreme shocks
+   * @param sidePreference - Value between -1 and 1 indicating bias direction
    */
   intrinsicShock(size: number,sidePreference: number): void {
+
+    if(sidePreference < -1) sidePreference = -1;
+    if(sidePreference > 1) sidePreference = 1;
     
     const direction = size >= 0 ? 1 : -1;
     const newValue = this.intrinsicValue * (1 + direction * Math.abs(size) * (0.5 + 0.5 * sidePreference));

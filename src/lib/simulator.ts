@@ -4,6 +4,7 @@ import { InformedBot, LiquidityBot, MeanReversionBot, MomentumBot, RandomBot, ty
 import { OrderBookWrapper } from './orderBookWrapper';
 import { parseJSON } from './parse';
 import type { SeededRandomGenerator } from './seededRandomGenerator';
+import type { NewsFactory } from './news/news';
 
 export type Snapshot = ReturnType<OrderBook['snapshot']>
 
@@ -44,7 +45,7 @@ export class Simulator {
             meanReversion: 0.05,
             ...settings
         };
-        console.log('Simulator settings:',this.settings);
+
         this.orderBookW = new OrderBookWrapper();
         const generator = new StockPriceGenerator({
             initialPrice: this.settings.initialPrice,
@@ -56,7 +57,7 @@ export class Simulator {
         });
         this.generator = generator;
 
-        const clockTime = 2000; // 2 seconds
+        const clockTime = 1000; // 1 second
         
         this.clockInterval = setInterval(() => this.clockTick(clockTime), clockTime);
         this.tickInterval = setInterval(() => this.tick(), 200);
@@ -84,6 +85,11 @@ export class Simulator {
         this.clock += clockTime;
         this.totalTime += clockTime;
         this.onClockTick?.(this.clock);
+        
+        this.onDebugPrices?.({
+            intrinsicValue: this.intrinsicValue,
+            guidePrice: this.guidePrice,
+        })
 
         if(this.ended()) {
             this.pause();
@@ -100,9 +106,9 @@ export class Simulator {
         const random = randomGenerator.next.bind(randomGenerator);
         for(let i=0;i<count;i++){
             const BotClass = botClasses[Math.floor(random() * random() * botClasses.length)]!;
-            const bot = new BotClass(`Bot${i}`, {
-                initialCash: Infinity, // inifinite cash for bots
-                initialShares: Math.floor(random()*10000),
+            const bot = new BotClass(`${BotClass.name}${i}`, {
+                initialCash: this.settings.initialPrice*1000+100000, // inifinite cash for bots
+                initialShares: BotClass.name ==='LiquidityBot' ? 10 : Math.floor(random()*1000),
                 orderSize: Math.floor(random()*10) + 1,
                 seed:this.settings.seed
             });
@@ -115,13 +121,22 @@ export class Simulator {
         return this.orderBookW.orderBook.marketPrice || this.settings.initialPrice;
     }
 
+    private _intrinsicValue: number | null = null;
+    get intrinsicValue(): number {
+        return this._intrinsicValue || this.settings.initialPrice;
+    }
+    private _guidePrice: number | null = null;
+    get guidePrice(): number {
+        return this._guidePrice || this.settings.initialPrice;
+    }
+
 
     tick() {
         if(this._paused) return;
         this.generateCachedSnapshot();
 
         const {intrinsicValue,guidePrice} = this.generator.tick();
-        console.log(`New guide price: ${guidePrice.toFixed(2)} ${guidePrice < intrinsicValue ? '<' : '>'} ${intrinsicValue.toFixed(2)}`);
+        // console.log(`New guide price: ${guidePrice.toFixed(2)} ${guidePrice < intrinsicValue ? '<' : '>'} ${intrinsicValue.toFixed(2)}`);
 
         let lastPrice = this.marketPrice;
         let updatedPrice = guidePrice;
@@ -140,11 +155,8 @@ export class Simulator {
             }
         });
 
-
-        this.onDebugPrices?.({
-            intrinsicValue,
-            guidePrice,
-        })
+        this._intrinsicValue = intrinsicValue;
+        this._guidePrice = guidePrice;
     }
 
 

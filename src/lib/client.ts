@@ -27,6 +27,7 @@ export class Client extends TradingParticipant{
         this._availableCash = inventoryConfig.initialCash || 10000;
         this.setInitialCash(this._availableCash);
         this._shares = inventoryConfig.initialShares || 0;
+        this.onPortfolioUpdate?.(this.getPortfolioWithPnL(this.room.simulator?.marketPrice || this.room.settings.openingPrice || 0));
     }
 
     get isWebSocket(){

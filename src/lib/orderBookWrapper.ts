@@ -1,6 +1,7 @@
 import { OrderBook, OrderType, Side, type ICancelOrder, type IProcessOrder } from 'nodejs-order-book'
 import type { TradingParticipant } from './bot';
 import { decimal } from './math';
+import type { IMarketOrder } from 'nodejs-order-book/dist/types/types';
 
 export type Order ={id:string,side: Side, price: number, quantity: number, time: number}
 type NonUndefined<T> = T extends undefined ? never : T;
@@ -18,7 +19,7 @@ export class OrderBookWrapper {
 
     orderByIDs: Map<string, [Map<number, Order[]>, Map<number, Order[]>]> = new Map();
      
-    observerMap: Map<string, (x: {orderId:string, quantity: number, cost:number}) => void> = new Map();
+    observerMap: Map<string, (x: {orderId:string, price:number, quantity: number, cost:number}) => void> = new Map();
 
     lastOrderProcessed: {orderId:string, quantity: number, cost:number} | null = null;
 
@@ -48,18 +49,17 @@ export class OrderBookWrapper {
 
     private _computeprocessedCash(order:IOrder|ILimitOrder, partialQuantityProcessed?:number) {
         if(!order) return null!
-        if(!order.id.includes('Bot')){
-            console.log("Computing: ", order.size, partialQuantityProcessed, 'price' in order ? order.price : null, 'stopPrice' in order ? order.stopPrice : null);
-        }
+        // console.log("Computing: ", order.size, partialQuantityProcessed, 'price' in order ? order.price : null, 'stopPrice' in order ? order.stopPrice : null);
         const quantity = partialQuantityProcessed?partialQuantityProcessed:order.size
+        // console.log("Computed quantity:", order.type, quantity);
         if(order?.type === 'limit') {
             const o = (order as ILimitOrder)!
             const cost = o.price * quantity
-            return {orderId:o.id, cost: order.side==Side.BUY ? cost : -cost, quantity: order.side==Side.BUY ? quantity : -quantity};
+            return {orderId:o.id, price: o.price, cost: order.side==Side.BUY ? cost : -cost, quantity: order.side==Side.BUY ? quantity : -quantity};
         }else{
             const o = (order as IStopOrder)!
             const cost = o.stopPrice * quantity
-            return {orderId:o.id, cost: o.side==Side.BUY ? cost : -cost, quantity: order.side==Side.BUY ? quantity : -quantity};
+            return {orderId:o.id, price: o.stopPrice, cost: o.side==Side.BUY ? cost : -cost, quantity: order.side==Side.BUY ? quantity : -quantity};
         }
     }
 
@@ -118,6 +118,7 @@ export class OrderBookWrapper {
         if(!order) return;
         // get client id from order id
         const cliendId = order.id.split('-$-')[0]!;
+        console.log("Processing partial order for client", cliendId, order,partialQuantityProcessed);
         if(typeof partialQuantityProcessed !== 'number') return;
         const o = this.orderByIDs.get(cliendId);
         if(!o) {
