@@ -23,7 +23,7 @@ const CONSTANT_NEWS: NewsDescription[] = [{
     durationTicks: 25,
     onStart: (room,simulator)=>{
         if(simulator){
-            simulator.generator.intrinsicShock(-1.5, 0.8);
+            simulator.generator.intrinsicShock(-1.5, 1);
         }
     }
 },{

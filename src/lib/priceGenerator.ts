@@ -20,7 +20,7 @@ class StockPriceGenerator {
   private guidePrice: number;      // Price from random walk model (with pressure/shock)
   private marketPrice: number;     // Actual price after agent trading
   private drift: number;
-  private volatility: number;
+  volatility: number;
   private random: SeededRandomGenerator;
   private tickCount: number;
   private shockState: ShockState | null;

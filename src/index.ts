@@ -1,3 +1,4 @@
+import { APIPowerHandler } from "./api/powers";
 import { parseJSON, parseMessageJson } from "./lib/parse";
 import roomManager from "./lib/roomManager";
 import { MessageType } from "./types";
@@ -5,11 +6,19 @@ import { MessageType } from "./types";
 const server = Bun.serve<{roomId:string,id:string,username:string}>({
     port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
     hostname:'localhost',
+    // fetch(req) {
+    //     const res = new Response('hello world');
+    //     res.headers.set('Access-Control-Allow-Origin', '*');
+    //     res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    //     // add Access-Control-Allow-Headers if needed
+    //     return res;
+    // },
     // `routes` requires Bun v1.2.3+
     routes: {
         // Static routes
         "/": new Response("OK"),
         "/zhealth": new Response("OK"),
+        "/api/powers.json": APIPowerHandler,
         '/ws/:roomId': (req) => {
             const cookies = req.headers.get("x-room-ws-id");
             const searchParams = new URL(req.url).searchParams

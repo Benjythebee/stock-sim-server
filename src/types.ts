@@ -1,3 +1,4 @@
+import type { PowerDescription, PowerDescriptionProperties } from "./lib/powers/power";
 import type { GameSettings } from "./lib/room";
 
 
@@ -22,6 +23,8 @@ export enum MessageType {
     ADMIN_SETTINGS = 30,
 
     GAME_CONCLUSION = 60,
+
+    POWER_OFFERS=80,
 
     DEBUG_PRICES=99,
 }
@@ -141,8 +144,19 @@ type ConclusionMessage = {
 }
 
 
+type PowerOffersMessage = {
+    type: MessageType.POWER_OFFERS;
+    offers: PowerDescriptionProperties[]
+}
 
-export type Message = JoinMessage | LeaveMessage | IsShockMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage;
+type PowerSelectedMessage = {
+    // implement 
+}
+
+
+export type Message = JoinMessage | LeaveMessage | IsShockMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
+PowerOffersMessage;
+
 export type {
     JoinMessage,
     LeaveMessage,
@@ -161,5 +175,6 @@ export type {
     StockMovementMessage,
     DebugPricesMessage,
     IsShockMessage,
+    PowerOffersMessage,
     ConclusionMessage
 }

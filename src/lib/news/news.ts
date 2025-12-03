@@ -9,14 +9,20 @@ export type NewsDescription= {
     description: string| ((room:Room)=>string);
     durationTicks: number;
     onStart?: (room: Room, simulator: Simulator)=>void;
-    onTick?: (room: Room, simulator: Simulator)=>void;
+    onTick?: (room: Room, simulator: Simulator,clock:number)=>void;
     onEnd?: ()=>void;
 }
 
 
 export class NewsFactory{
-    
+    /**
+     *  News that have already been exhausted (completed their duration)
+     * We're keeping them here for potential future reference
+     */
     exhaustedNews: Map<string, News> = new Map();
+    /**
+     * Active news items
+     */
     map: Map<string, News> = new Map();
 
     nextRandomNewsTimeout: NodeJS.Timeout | null = null;
@@ -49,8 +55,12 @@ export class NewsFactory{
 
     addNews(newsDescription: NewsDescription) {
        const news = new News(newsDescription, this);
-       this.map.set(news.id, news);
-       return news;
+       if(news.exhausted) {
+            this.exhaustedNews.set(news.id, news);
+        }else{
+            this.map.set(news.id, news);
+        }
+        return news;
     }
 
     removeNews(newsId: string) {
@@ -59,9 +69,9 @@ export class NewsFactory{
     }
 
 
-    tick() {
+    tick=(clock:number)=> {
         for(const news of this.map.values()) {
-            news.onTick();
+            news.onTick(clock);
         }
     }
 
@@ -86,7 +96,7 @@ export class News {
     /**
      * Customizable callbacks that are run on top of the default behavior
      */
-    onDescriptionTick?: (room: Room, simulator: Simulator)=>void;
+    onDescriptionTick?: (room: Room, simulator: Simulator,clock:number)=>void;
     onDescriptionEnd?: ()=>void;
     onDescriptionStart?: (room: Room, simulator: Simulator)=>void;
 
@@ -102,6 +112,10 @@ export class News {
         this.onDescriptionEnd = newsDescription.onEnd;
 
         this.onStart();
+
+        if(!this.onTick || this.durationTicks <=0) {
+            this.exhausted = true;
+        }
     }
 
     get room() {
@@ -122,11 +136,11 @@ export class News {
         this.onDescriptionStart?.(this.room, this.simulator);
     };
 
-    onTick = ()=> {
+    onTick = (clock:number)=> {
         if(this.exhausted) return;
         this.ticksElapsed++;
         if(this.onDescriptionTick) {
-            this.onDescriptionTick(this.room, this.simulator);
+            this.onDescriptionTick(this.room, this.simulator, clock);
         }
         if(this.ticksElapsed >= this.durationTicks) {
             this.exhausted = true;

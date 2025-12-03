@@ -4,7 +4,7 @@ import { InformedBot, LiquidityBot, MeanReversionBot, MomentumBot, RandomBot, ty
 import { OrderBookWrapper } from './orderBookWrapper';
 import { parseJSON } from './parse';
 import type { SeededRandomGenerator } from './seededRandomGenerator';
-import type { NewsFactory } from './news/news';
+import { Observable } from './observable';
 
 export type Snapshot = ReturnType<OrderBook['snapshot']>
 
@@ -28,6 +28,7 @@ export class Simulator {
      */
     public totalTime = 0;
     clock: number = Date.now();
+    onClockObservable:Observable<number> = new Observable<number>();
     tickInterval: NodeJS.Timeout | null = null;
     clockInterval: NodeJS.Timeout | null = null;
     _paused: boolean = true;
@@ -85,7 +86,7 @@ export class Simulator {
         this.clock += clockTime;
         this.totalTime += clockTime;
         this.onClockTick?.(this.clock);
-        
+        this.onClockObservable.notifyObservers(this.clock);
         this.onDebugPrices?.({
             intrinsicValue: this.intrinsicValue,
             guidePrice: this.guidePrice,
@@ -187,6 +188,7 @@ export class Simulator {
             this.orderBookW.dispose();
             this.orderBookW = null!;
         }
+        this.onClockObservable.clear()
 
         if(this.generator){
             this.generator.dispose();

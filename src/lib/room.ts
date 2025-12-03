@@ -7,6 +7,7 @@ import { OrderBook } from 'nodejs-order-book'
 import { Simulator } from "./simulator";
 import { SeededRandomGenerator } from "./seededRandomGenerator";
 import { NewsFactory } from "./news/news";
+import { PowerFactory } from "./powers/power";
 
 export type GameSettings = {
     startingCash: number;
@@ -25,6 +26,7 @@ export class Room {
     randomGenerator: SeededRandomGenerator
     simulator: Simulator | null = null;
     newsFactory: NewsFactory | null = null;
+    powerFactory: PowerFactory | null = null;
     time: number = 0;
     settings: GameSettings = {
         startingCash: 10000,
@@ -119,6 +121,9 @@ export class Room {
         }
 
         this.newsFactory = new NewsFactory(this, this.simulator!, this.settings.enableRandomNews);
+        this.simulator.onClockObservable.add(this.newsFactory.tick);
+        this.powerFactory = new PowerFactory(this, this.simulator!);
+        this.simulator.onClockObservable.add(this.powerFactory.tick);
 
         this.clientMap.forEach(client=>{
             client.updateClientInventory({
