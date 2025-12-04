@@ -40,7 +40,11 @@ export class NewsFactory{
                     }
                     const newsIndex = Math.floor(this.random() * CONSTANT_NEWS.length);
                     const newsDesc = CONSTANT_NEWS[newsIndex];
-                    console.log('Scheduling news:', newsDesc);
+                    if(!newsDesc) {
+                        console.error('No news description found for index:', newsIndex,'max index',CONSTANT_NEWS.length-1);
+                        scheduleNextNews();
+                        return;
+                    }
                     this.addNews(newsDesc!);
                     scheduleNextNews();
                 }, timeoutDuration);

@@ -24,6 +24,8 @@ export abstract class TradingParticipant {
   protected _availableCash: number;
   protected _shares: number
 
+  tradingDisabled: boolean = false;
+  
   public randomGenerator: SeededRandomGenerator;
 
   constructor(id: string, {initialCash, initialShares,seed}: Partial<InventoryConfig> = {
@@ -83,9 +85,6 @@ export abstract class TradingParticipant {
   onPortfolioUpdate: ((portfolio: { id:string, cash: number; shares: number,pnl?: number }, currentPrice?: number) => void) | undefined = undefined;
 
   onOrderProcessed=(result:{orderId:string, price:number, quantity: number, cost:number})=>{
-    if(!this.id.includes('Bot')){
-      console.log(this.id ,result)
-    }
     if(result.cost > 0){
       // Buy order processed
       this._lockedCash -= result.cost; 
@@ -189,6 +188,14 @@ abstract class TradingBot extends TradingParticipant {
   ): boolean;
 
   protected placeBuyOrder(simulator: Simulator, price: number, quantity: number, type: 'market' | 'limit' = 'limit'): void {
+
+    if(this.tradingDisabled) {
+      if(this.debug){
+        console.log(`Bot ${this.id} trading is disabled. Skipping buy order.`);
+      }
+      return;
+    }
+
     const cost = price * quantity;
     if (this.availableCash >= cost) {
         this._lockedCash += cost;
@@ -248,6 +255,12 @@ abstract class TradingBot extends TradingParticipant {
 
 
   protected placeSellOrder(simulator: Simulator, price: number, quantity: number, type: 'market' | 'limit' = 'limit'): void {
+    if(this.tradingDisabled) {
+      if(this.debug){
+        console.log(`Bot ${this.id} trading is disabled. Skipping buy order.`);
+      }
+      return;
+    }
     if (this.shares >= quantity) {
         this._lockedShares += quantity;
         this.shares -= quantity;
@@ -269,6 +282,12 @@ abstract class TradingBot extends TradingParticipant {
   }
 
   cancelOrder(order:Order,simulator: Simulator): void {
+    if(this.tradingDisabled) {
+      if(this.debug){
+        console.log(`Bot ${this.id} trading is disabled. Skipping buy order.`);
+      }
+      return;
+    }
     let canceled = simulator.orderBookW.orderBook.cancel(order.id);
 
     if(!canceled) return;
@@ -712,8 +731,8 @@ class RandomBot extends TradingBot {
     const map =simulator.orderBookW.orderByIDs.get(this.id)
     const orderList = priceVariance < 1 ? map?.[1] : map?.[0];
     const orderLength = orderList?.size || 0;
-    if(orderLength>5){
-      console.log(`RandomBot ${this.id} skipping trade - too many orders (${orderLength}) on this side`);
+    if(orderLength>10){
+      // console.log(`RandomBot ${this.id} skipping trade - too many orders (${orderLength}) on this side`);
       return false; // too many orders on this side
     }
     let price = 0

@@ -1,4 +1,4 @@
-import { MessageType, type IsAdminMessage, type Message } from "../types";
+import { MessageType, type IsAdminMessage, type Message, type NotificationMessage } from "../types";
 import { Client } from "./client";
 import { parseMessageJson } from "./parse";
 import { StockPriceGenerator } from "./priceGenerator";
@@ -148,6 +148,26 @@ export class Room {
     }
     get isEnded() {
         return this.state.ended;
+    }
+    /**
+     * Sends a "NOTIFICATION" message to specific clients in the room
+     */
+    notify(clients: Client[], message: Omit<NotificationMessage, 'type'>) {
+        clients.forEach(client=>{
+            client.send({
+                type: MessageType.NOTIFICATION,
+                ...message
+            });
+        });
+    }
+    /**
+     * Sends a "NOTIFICATION" message to all clients in the room
+     */
+    notifyAll(message: Omit<NotificationMessage, 'type'>) {
+        this.sendToAll({
+            type: MessageType.NOTIFICATION,
+            ...message
+        });
     }
 
     setState = (state: Partial<typeof this.state>) => {

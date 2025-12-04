@@ -80,6 +80,22 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
                 return;
             }
 
+            if(msg.type === MessageType.POWER_SELECT){
+                const client = room.getClient(ws.data.id)
+                if(!client) return;
+                room.powerFactory?.handleSelection(client, msg.index);
+                return;
+            }
+
+            if(msg.type === MessageType.POWER_CONSUME){
+                const client = room.getClient(ws.data.id)
+                if(!client) return;
+                room.powerFactory?.handleConsumption(client, msg.id);
+                return;
+            }
+
+
+
             const isAdmin = ws.data.id === room.adminClient?.id
 
             if(isAdmin){

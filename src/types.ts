@@ -19,12 +19,17 @@ export enum MessageType {
     PORTFOLIO_UPDATE = 12,
     SHOCK = 13,
     NEWS = 14,
+    NOTIFICATION = 15,
+    CLIENT_STATE = 16,
 
     ADMIN_SETTINGS = 30,
 
     GAME_CONCLUSION = 60,
 
     POWER_OFFERS=80,
+    POWER_SELECT=81,
+    POWER_CONSUME=82,
+    POWER_INVENTORY=83,
 
     DEBUG_PRICES=99,
 }
@@ -61,6 +66,11 @@ type IsShockMessage = {
     target: 'intrinsic' | 'market'
 }
 
+type ClientStateMessage = {
+    type: MessageType.CLIENT_STATE;
+    disabled: boolean;
+}
+
 type RoomStateMessage = {
     type: MessageType.ROOM_STATE;
     paused: boolean;
@@ -88,6 +98,13 @@ type ChatMessage = {
     roomId: string;
     id: string;
     content: string;
+}
+
+type NotificationMessage = {
+    type: MessageType.NOTIFICATION;
+    level: 'info' | 'warning' | 'error' | 'success';
+    title: string;
+    description?: string;
 }
 
 type ErrorMessage = {
@@ -150,12 +167,27 @@ type PowerOffersMessage = {
 }
 
 type PowerSelectedMessage = {
-    // implement 
+    type: MessageType.POWER_SELECT;
+    index: number;
+}
+
+type PowerConsumeMessage = {
+    type: MessageType.POWER_CONSUME;
+    id: string;
+    notification:{
+        title: string;
+        description?: string;
+    }
+}
+
+type PowerInventoryMessage = {
+    type: MessageType.POWER_INVENTORY;
+    inventory: string[]
 }
 
 
-export type Message = JoinMessage | LeaveMessage | IsShockMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
-PowerOffersMessage;
+export type Message = JoinMessage | LeaveMessage | IsShockMessage | NotificationMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
+PowerOffersMessage | PowerSelectedMessage | PowerConsumeMessage | PowerInventoryMessage |ClientStateMessage
 
 export type {
     JoinMessage,
@@ -167,14 +199,19 @@ export type {
     PongMessage,
     ClockMessage,
     ChatMessage,
+    NotificationMessage,
     ErrorMessage,
     StockMessage,
     NewsMessage,
+    ClientStateMessage,
     AdminSettingMessage,
     PortfolioUpdateMessage,
     StockMovementMessage,
     DebugPricesMessage,
     IsShockMessage,
     PowerOffersMessage,
+    PowerSelectedMessage,
+    PowerConsumeMessage,
+    PowerInventoryMessage,
     ConclusionMessage
 }

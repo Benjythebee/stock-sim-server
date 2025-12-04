@@ -22,6 +22,18 @@ export class Client extends TradingParticipant{
         this.ws.subscribe(this.room.roomId);
     }
 
+    toggleDisabledTrading = (disable: boolean) => {
+        this.tradingDisabled = disable;
+        this.sendState();
+    }
+
+    sendState=()=> {
+        this.send({
+            type: MessageType.CLIENT_STATE,
+            disabled: this.tradingDisabled
+        })
+    }
+
     updateClientInventory = (inventoryConfig: Partial<InventoryConfig>) => {
         this.randomGenerator = new SeededRandomGenerator(inventoryConfig.seed || 42);
         this._availableCash = inventoryConfig.initialCash || 10000;

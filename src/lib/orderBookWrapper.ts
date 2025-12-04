@@ -74,9 +74,6 @@ export class OrderBookWrapper {
     private processDoneOrders=(order: IOrder) =>{
         const clientId = order.id.split('-$-')[0]!;
         const o = this.orderByIDs.get(clientId);
-        if(!clientId.toLowerCase().includes("bot")) {
-            console.log("Processing done order for client", clientId, o);
-        }
         if(!o) {
             return
         }
@@ -105,9 +102,6 @@ export class OrderBookWrapper {
             onOrderProcessed && onOrderProcessed(this._computeprocessedCash(order))
         }
         const orders = oSide.get(p);
-        if(!clientId.toLowerCase().includes("bot")) {
-            console.log("Orders at price", p, orders);
-        }
         
         if(orders) {
             handler(orders,p);
@@ -118,7 +112,7 @@ export class OrderBookWrapper {
         if(!order) return;
         // get client id from order id
         const cliendId = order.id.split('-$-')[0]!;
-        console.log("Processing partial order for client", cliendId, order,partialQuantityProcessed);
+        // console.log("Processing partial order for client", cliendId, order,partialQuantityProcessed);
         if(typeof partialQuantityProcessed !== 'number') return;
         const o = this.orderByIDs.get(cliendId);
         if(!o) {
@@ -146,7 +140,7 @@ export class OrderBookWrapper {
                 orders.push({id:order.id,side:order.side,price:order.price,quantity:order.size-partialQuantityProcessed,time: Date.now()})
             }
             onOrderProcessed && onOrderProcessed(this._computeprocessedCash(order,partialQuantityProcessed))
-        }
+    }
 
         const orders = oSide.get(p);
         if(orders) {
