@@ -4,6 +4,7 @@ import type { GameSettings } from "./lib/room";
 
 
 export enum MessageType {
+    ID=-1,
     JOIN = 0,
     LEAVE = 1,
     IS_ADMIN=2,
@@ -34,6 +35,44 @@ export enum MessageType {
     DEBUG_PRICES=99,
 }
 
+
+export const MessageTypeNames: { [key in MessageType]: string } = {
+    [MessageType.ID]: "ID",
+    [MessageType.JOIN]: "JOIN",
+    [MessageType.LEAVE]: "LEAVE",
+    [MessageType.IS_ADMIN]: "IS_ADMIN",
+    [MessageType.TOGGLE_PAUSE]: "TOGGLE_PAUSE",
+    [MessageType.MESSAGE]: "MESSAGE",
+    [MessageType.ERROR]: "ERROR",
+    [MessageType.PING]: "PING",
+    [MessageType.PONG]: "PONG",
+    [MessageType.CLOCK]: "CLOCK",
+    [MessageType.ROOM_STATE]: "ROOM_STATE",
+    [MessageType.STOCK_ACTION]: "STOCK_ACTION",
+    [MessageType.STOCK_MOVEMENT]: "STOCK_MOVEMENT",
+    [MessageType.PORTFOLIO_UPDATE]: "PORTFOLIO_UPDATE",
+    [MessageType.SHOCK]: "SHOCK",
+    [MessageType.NEWS]: "NEWS",
+    [MessageType.NOTIFICATION]: "NOTIFICATION",
+    [MessageType.CLIENT_STATE]: "CLIENT_STATE",
+    // Admin Messages - 30
+    [MessageType.ADMIN_SETTINGS]: "ADMIN_SETTINGS",
+
+    [MessageType.GAME_CONCLUSION]: "GAME_CONCLUSION",
+
+
+    [MessageType.POWER_OFFERS]: "POWER_OFFERS",
+    [MessageType.POWER_SELECT]: "POWER_SELECT",
+    [MessageType.POWER_CONSUME]: "POWER_CONSUME",
+    [MessageType.POWER_INVENTORY]: "POWER_INVENTORY",
+
+    [MessageType.DEBUG_PRICES]: "DEBUG_PRICES"
+};
+
+type IDMessage = {
+    type: MessageType.ID;
+    id: string;
+}
 
 type JoinMessage = {
     type: MessageType.JOIN;
@@ -186,10 +225,11 @@ type PowerInventoryMessage = {
 }
 
 
-export type Message = JoinMessage | LeaveMessage | IsShockMessage | NotificationMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
+export type Message = IDMessage | JoinMessage | LeaveMessage | IsShockMessage | NotificationMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
 PowerOffersMessage | PowerSelectedMessage | PowerConsumeMessage | PowerInventoryMessage |ClientStateMessage
 
 export type {
+    IDMessage,
     JoinMessage,
     LeaveMessage,
     PingMessage,

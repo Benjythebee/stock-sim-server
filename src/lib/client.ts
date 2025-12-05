@@ -1,5 +1,5 @@
 import { Side } from "nodejs-order-book";
-import { MessageType, type Message, type StockMessage } from "../types";
+import { MessageType, type IsAdminMessage, type Message, type StockMessage } from "../types";
 import { parseMessageJson } from "./parse";
 import type { Room } from "./room";
 import type { ServerWebSocket } from "./roomManager";
@@ -8,9 +8,9 @@ import { SeededRandomGenerator } from "./seededRandomGenerator";
 import { decimal } from "./math";
 
 
-
 export class Client extends TradingParticipant{
     ws: ServerWebSocket;
+    disconnectedAt: number | null = null;
     constructor(ws: ServerWebSocket, public room:Room, {initialCash, initialShares,seed}: Partial<InventoryConfig> = {
         initialCash: 10000,
         initialShares: 0,
@@ -105,7 +105,7 @@ export class Client extends TradingParticipant{
         const updatedPrice = this.room.simulator!.orderBookW.orderBook.marketPrice;
         if(updatedPrice){
             console.log("Updated market price to", updatedPrice);
-            this.room.simulator!.generator.setMarketPrice(updatedPrice);
+            this.room.simulator!.generator.guidePrice = updatedPrice
             this.room.simulator!.onPrice?.(updatedPrice);
         }
 
@@ -123,5 +123,54 @@ export class Client extends TradingParticipant{
 
     isAlive(): boolean {
         return this.ws.isSubscribed(this.roomId);
+    }
+
+    _disconnectTimeout:NodeJS.Timeout | null = null;
+    markAsDisconnected() {
+        this.disconnectedAt = Date.now();
+        this._disconnectTimeout = setTimeout(() => {
+            console.log("Removing disconnected client", this.id, "from room", this.room.roomId);
+            if(this._disconnectTimeout){
+                clearTimeout(this._disconnectTimeout);
+            }
+            this.room.removeClient(this);
+            if(this.room.clientMap.size === 0){
+                this.room.dispose();
+            }
+        }, 1 * 60 * 1000); // 1 minute
+    }
+
+    reconnect(ws: ServerWebSocket) {
+        console.log(`[${this.roomId}]`,"Reconnecting client", this.ws.data.id,'with username', this.name, "in room");
+
+        this.disconnectedAt = null;
+        if(this._disconnectTimeout){
+            clearTimeout(this._disconnectTimeout);
+            this._disconnectTimeout = null;
+        }
+
+
+        this.ws=ws
+        this.id = ws.data.id;
+
+        this.room.sendRoomState(this);
+
+        this.ws.subscribe(this.room.roomId);
+
+        if(this.room.adminClient?.id === this.id){
+            this.send({type:MessageType.IS_ADMIN} as IsAdminMessage)
+        }
+
+        if(this.room.isStarted){
+            this.send({
+                type:MessageType.PORTFOLIO_UPDATE,
+                value: this.getPortfolioWithPnL(this.room.simulator?.marketPrice || 0),
+                id: this.id
+            })
+            this.room.powerFactory?.sendInventoryToClient(this);
+        }
+
+        this.sendState();
+        
     }
 }

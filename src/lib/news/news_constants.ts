@@ -6,7 +6,7 @@ const CONSTANT_NEWS: NewsDescription[] = [{
     durationTicks: 20,
     onStart: (room,simulator)=>{
         if(simulator){
-            simulator.generator.intrinsicShock(2, 1);
+            simulator.generator.intrinsicShock(0.1);
         }
     }
 },{
@@ -23,7 +23,7 @@ const CONSTANT_NEWS: NewsDescription[] = [{
     durationTicks: 25,
     onStart: (room,simulator)=>{
         if(simulator){
-            simulator.generator.intrinsicShock(-1.5, 1);
+            simulator.generator.intrinsicShock(-0.05);
         }
     }
 },{
@@ -40,7 +40,7 @@ const CONSTANT_NEWS: NewsDescription[] = [{
     durationTicks: 35,
     onStart: (room,simulator)=>{
         if(simulator){
-            simulator.generator.intrinsicShock(-2, 1.2);
+            simulator.generator.intrinsicShock(-0.1);
         }
     }
 },{
@@ -57,7 +57,7 @@ const CONSTANT_NEWS: NewsDescription[] = [{
     durationTicks: 12,
     onStart: (room,simulator)=>{
         if(simulator){
-            simulator.generator.intrinsicShock(1.8, 2);
+            simulator.generator.intrinsicShock(0.5);
         }
     }
 },{

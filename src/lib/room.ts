@@ -1,13 +1,20 @@
 import { MessageType, type IsAdminMessage, type Message, type NotificationMessage } from "../types";
 import { Client } from "./client";
 import { parseMessageJson } from "./parse";
-import { StockPriceGenerator } from "./priceGenerator";
-import type { RoomManager, ServerWebSocket } from "./roomManager";
+import type { RoomManager } from "./roomManager";
 import { OrderBook } from 'nodejs-order-book'
 import { Simulator } from "./simulator";
 import { SeededRandomGenerator } from "./seededRandomGenerator";
 import { NewsFactory } from "./news/news";
 import { PowerFactory } from "./powers/power";
+import { SpectatorClientManager } from "./spectatorClient";
+
+export type WebSocketWithRoomData = Bun.ServerWebSocket<{
+        roomId: string;
+        id: string;
+        username: string;
+        spectator?: boolean;
+    }>;
 
 export type GameSettings = {
     startingCash: number;
@@ -25,6 +32,7 @@ export class Room {
     orderBook: OrderBook;
     randomGenerator: SeededRandomGenerator
     simulator: Simulator | null = null;
+    spectatorManager:SpectatorClientManager
     newsFactory: NewsFactory | null = null;
     powerFactory: PowerFactory | null = null;
     time: number = 0;
@@ -55,13 +63,15 @@ export class Room {
         }
 
         this.randomGenerator = new SeededRandomGenerator(this.settings.seed);
+
+        this.spectatorManager = new SpectatorClientManager(this);
     }
 
     get server(){
         return this.roomManager.server;
     }
 
-    setup() {
+    setup=()=> {
 
         if(this.simulator) {
             this.simulator.dispose()
@@ -141,7 +151,7 @@ export class Room {
     }
 
     get isPaused() {
-        return !!this.simulator?._paused || true;
+        return !!this.simulator?.isPaused;
     }
     get isStarted() {
         return this.state.started;
@@ -283,26 +293,36 @@ export class Room {
         }
     }
 
-    addClient(ws: Bun.ServerWebSocket<{
-        roomId: string;
-        id: string;
-        username: string;
-    }>) {
-        this.sendToAll({type:MessageType.JOIN, id:ws.data.id, username: ws.data.username, roomId:this.roomId})
+    addSpectatorClient(ws: WebSocketWithRoomData){
+        this.spectatorManager.addSpectator(ws);
+    }
+
+    addClient(ws: WebSocketWithRoomData) {
+        const existingClient = this.clientMap.get(ws.data.id);
+        if(existingClient){
+            existingClient.reconnect(ws)
+            return
+        }else{
+            this.sendToAll({type:MessageType.JOIN, id:ws.data.id, username: ws.data.username, roomId:this.roomId})
+        }
+
         const client = new Client(ws, this);
         client.name = ws.data.username || ws.data.id;
         this.clientMap.set(client.id, client);
+        
+        //@FIX ME; this sends ID to the client to handle re-connects; a bit of an awkward hack tbh
+        client.send({type:MessageType.ID, id:this.roomId+'-'+client.id});
+
         if(this.clientMap.size === 1){
             this.adminClient = client;
-            client.send({type:MessageType.IS_ADMIN} as IsAdminMessage)
+            client.send({type:MessageType.IS_ADMIN})
         }
 
         this.sendRoomState(client);
     }
 
-    sendRoomState = (client:Client)=>{
-        
-        const roomState = {
+    get roomState() {
+        return {
             paused: this.isPaused,
             started: this.isStarted,
             ended: this.isEnded,
@@ -312,7 +332,10 @@ export class Room {
             clients: this.clientMap.size,
             price: this.simulator ? this.simulator.marketPrice : this.settings.openingPrice,
         }
+    }
 
-        client.send({type:MessageType.ROOM_STATE, ...roomState} );
+    sendRoomState = (client:Client)=>{
+    
+        client.send({type:MessageType.ROOM_STATE, ...this.roomState} );
     }
 }

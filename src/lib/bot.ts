@@ -1,7 +1,7 @@
 import  { OrderBook, Side } from "nodejs-order-book";
 import type { Simulator, Snapshot } from "./simulator";
 import type { Order, OrderBookWrapper } from "./orderBookWrapper";
-import { priceTwoDecimal } from "./priceGenerator";
+import { roundPrice } from "./priceGenerator";
 import { SeededRandomGenerator } from "./seededRandomGenerator";
 
 export type InventoryConfig = { 
@@ -778,8 +778,8 @@ export { TradingBot,InformedBot,LiquidityBot, MomentumBot, MeanReversionBot, Ran
 
 
 export const computePriceChange = (currentPrice:number, minStep:number, changeUp:number, changeDown:number) => {
-    const upChange = priceTwoDecimal(currentPrice * (1+changeUp),true);
-    const downChange = priceTwoDecimal(currentPrice * (1-changeDown),false);
+    const upChange = roundPrice(currentPrice * (1+changeUp));
+    const downChange = roundPrice(currentPrice * (1-changeDown));
 
     const minPriceUp = currentPrice + (minStep || 0);
     const minPriceDown = currentPrice - (minStep || 0);

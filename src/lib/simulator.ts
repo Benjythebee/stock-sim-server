@@ -20,7 +20,7 @@ export type SimulatorSettings = {
     }
 
 export class Simulator {
-
+    uuid: string = crypto.randomUUID();
     orderBookW: OrderBookWrapper;
     generator: StockPriceGenerator;
     /**
@@ -31,7 +31,7 @@ export class Simulator {
     onClockObservable:Observable<number> = new Observable<number>();
     tickInterval: NodeJS.Timeout | null = null;
     clockInterval: NodeJS.Timeout | null = null;
-    _paused: boolean = true;
+    private _paused: boolean = true;
     bots: TradingBot[] = [];
     private settings : SimulatorSettings;
 
@@ -53,8 +53,6 @@ export class Simulator {
             drift: 0.0005,        // Slight upward trend
             volatility: this.settings.marketVolatility,     // 2% volatility
             seed: this.settings.seed,
-            marketInfluence: this.settings.marketInfluence,
-            meanReversion: this.settings.meanReversion
         });
         this.generator = generator;
 
@@ -75,6 +73,10 @@ export class Simulator {
 
     resume = () => {
         this._paused = false;
+    }
+
+    get isPaused() {
+        return this._paused;
     }
 
     ended = () => {
@@ -131,7 +133,6 @@ export class Simulator {
         return this._guidePrice || this.settings.initialPrice;
     }
 
-
     tick() {
         if(this._paused) return;
         this.generateCachedSnapshot();
@@ -141,21 +142,21 @@ export class Simulator {
 
         let lastPrice = this.marketPrice;
         let updatedPrice = guidePrice;
-        this.bots.forEach(bot => {
-            // Should the bot cancel existing orders?
-            // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
+        // this.bots.forEach(bot => {
+        //     // Should the bot cancel existing orders?
+        //     // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
 
-            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,guidePrice)){
-                updatedPrice = this.marketPrice;
-                // console.log('updated price:',updatedPrice);
-                // this.generator.setMarketPrice(updatedPrice)
-                if(updatedPrice !== lastPrice){
-                    this.onPrice?.(updatedPrice);
-                    lastPrice = updatedPrice;
-                }
-            }
-        });
-
+        //     if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,guidePrice)){
+        //         updatedPrice = this.marketPrice;
+        //         // console.log('updated price:',updatedPrice);
+        //         // this.generator.setMarketPrice(updatedPrice)
+        //         if(updatedPrice !== lastPrice){
+        //             this.onPrice?.(updatedPrice);
+        //             lastPrice = updatedPrice;
+        //         }
+        //     }
+        // });
+            this.onPrice?.(updatedPrice);
         this._intrinsicValue = intrinsicValue;
         this._guidePrice = guidePrice;
     }
@@ -170,8 +171,9 @@ export class Simulator {
             clearInterval(this.clockInterval);
             this.clockInterval = null;
         }
+
         this.bots = [];
-        this._paused = true;
+        this.pause();
         if(this.onEnd){
             this.onEnd = undefined;
         }

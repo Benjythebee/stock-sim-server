@@ -2,248 +2,142 @@ import { SeededRandomGenerator } from "./seededRandomGenerator";
 
 interface StockPriceConfig {
   initialPrice: number;
-  drift: number;          // Overall trend (positive = upward, negative = downward)
-  volatility: number;     // Price deviation/volatility (0-1 typically)
+  drift: number;              // Overall trend (positive = upward, negative = downward)
+  volatility: number;         // Price deviation/volatility (0-1 typically)
   seed: number;
-  marketInfluence?: number; // How much market price affects guide price (0-1, default 0.3)
-  meanReversion?: number;   // Strength of mean reversion (0-1, default 0.1)
+  meanReversionStrength?: number; // How strongly guide price reverts to intrinsic (0-1, default 0.05)
 }
 
 interface ShockState {
   intensity: number;
-  duration: number;
   ticksRemaining: number;
 }
 
 class StockPriceGenerator {
-  private intrinsicValue: number;  // Pure fundamental price (no pressure/shock)
-  private guidePrice: number;      // Price from random walk model (with pressure/shock)
-  private marketPrice: number;     // Actual price after agent trading
+  private intrinsicValue: number;  // Fundamental "true" value - stable unless shocked
+  guidePrice: number;      // Price from random walk model
   private drift: number;
   volatility: number;
+  history: number[] = [];
   private random: SeededRandomGenerator;
   private tickCount: number;
   private shockState: ShockState | null;
-  private marketInfluence: number;
-  private meanReversion: number;
-  private priceHistory: number[];  // Track recent market prices
+  private meanReversionStrength: number;
 
   constructor(config: StockPriceConfig) {
     this.intrinsicValue = config.initialPrice;
     this.guidePrice = config.initialPrice;
-    this.marketPrice = config.initialPrice;
     this.drift = config.drift;
     this.volatility = config.volatility;
     this.random = new SeededRandomGenerator(config.seed);
     this.tickCount = 0;
     this.shockState = null;
-    this.marketInfluence = config.marketInfluence ?? 0.3;
-    this.meanReversion = config.meanReversion ?? 0.1;
-    this.priceHistory = [config.initialPrice];
-  }
-
-  get history(): number[] {
-    return this.priceHistory;
+    this.meanReversionStrength = config.meanReversionStrength ?? 0.05;
   }
 
   /**
-   * Generate the next tick prices
-   * Returns both intrinsic value (pure fundamental) and guide price (with pressure/shocks)
+   * Generate the next tick price using geometric Brownian motion
+   * Returns both the stable intrinsic value and the random-walk guide price
    */
   tick(): { intrinsicValue: number; guidePrice: number } {
     this.tickCount++;
 
-    // First, calculate INTRINSIC VALUE - pure random walk with base drift only
-    const dt = 1; // Time step
-    const randomShock = this.random.nextNormal();
-    const intrinsicPriceChange = (this.drift - 0.5 * this.volatility ** 2) * dt 
-                                + this.volatility * Math.sqrt(dt) * randomShock;
-    
-    this.intrinsicValue *= Math.exp(intrinsicPriceChange);
-    this.intrinsicValue = Math.max(this.intrinsicValue, 0.01);
+    // Calculate total drift: base drift + shock + mean reversion
+    let totalDrift = this.drift;
 
-    // Now calculate GUIDE PRICE - intrinsic value + market pressure + shocks
-    const marketPressure = this.calculateMarketPressure();
-    
-    let additionalDrift = marketPressure;
+    // Add shock contribution if active
     if (this.shockState && this.shockState.ticksRemaining > 0) {
-      // Shock intensity decays linearly over its duration
-      const decayFactor = this.shockState.ticksRemaining / this.shockState.duration;
-      additionalDrift += this.shockState.intensity * decayFactor;
+      totalDrift += this.shockState.intensity;
       this.shockState.ticksRemaining--;
       
       if (this.shockState.ticksRemaining <= 0) {
         this.shockState = null;
       }
     }
-    // console.log('additionalDrift:', additionalDrift, 'volatility:', this.volatility)
-    // Apply additional drift to intrinsic value to get guide price
-    const guidePriceChange = (additionalDrift - 0.5 * this.volatility ** 2) * dt 
-    + this.volatility * Math.sqrt(dt) * this.random.nextNormal();
+
+    // Add mean reversion toward intrinsic value
+    const priceDifference = this.guidePrice - this.intrinsicValue;
+    const reversionForce = -(priceDifference / this.intrinsicValue) * this.meanReversionStrength;
+    totalDrift += reversionForce;
+
+    // Apply geometric Brownian motion to guide price
+    const dt = 1; // Time step
+    const randomShock = this.random.nextNormal();
+    const priceChange = (totalDrift - 0.5 * this.volatility ** 2) * dt 
+                       + this.volatility * Math.sqrt(dt) * randomShock;
     
-    // console.log('guidePriceChange:',this.intrinsicValue,guidePriceChange)
-    this.guidePrice = this.intrinsicValue * Math.exp(guidePriceChange);
-    this.guidePrice = Math.max(this.guidePrice, 0.01);
-    
-    // If no market price was set from previous tick, use guide price
-    if (this.marketPrice === this.priceHistory[this.priceHistory.length - 1]) {
-      this.marketPrice = this.guidePrice;
-    }
-    // console.log('Generated prices - Intrinsic:', this.intrinsicValue.toFixed(2), 'Guide:', this.guidePrice.toFixed(2), 'Market:', this.marketPrice.toFixed(2));
+    this.guidePrice *= Math.exp(priceChange);
+    this.guidePrice = Math.max(this.guidePrice, 0.01); // Ensure positive
+
+    this.history.push(this.guidePrice);
+
     return {
-      intrinsicValue: priceTwoDecimal(this.intrinsicValue,true),
-      guidePrice: priceTwoDecimal(this.guidePrice,true)
+      intrinsicValue: roundPrice(this.intrinsicValue),
+      guidePrice: roundPrice(this.guidePrice)
     };
   }
 
   /**
-   * Calculate market pressure based on difference between market and intrinsic value
-   * This creates momentum and mean reversion effects
+   * Apply a temporary shock to the guide price generation
+   * This creates a temporary drift in the random walk
+   * 
+   * @param intensity - Drift intensity (positive = upward pressure, negative = downward)
+   *                    Typical range: -0.5 to 0.5 for moderate shocks
+   * @param duration - How many ticks the shock lasts (default: 10)
    */
-  private calculateMarketPressure(): number {
-    if (this.priceHistory.length < 2) return 0;
+  shock(intensity: number, duration: number = 10): void {
+    console.log(`Applying market shock: intensity=${intensity.toFixed(3)}, duration=${duration} ticks`);
     
-    const lastMarketPrice = this.priceHistory[this.priceHistory.length - 1];
-    if (typeof lastMarketPrice !== 'number') return 0;
-    const priceDifference = lastMarketPrice - this.intrinsicValue;
-    const percentageDiff = priceDifference / this.intrinsicValue;
-
-    // Market influence creates momentum (if market price > intrinsic, push guide up)
-    const momentum = percentageDiff * this.marketInfluence;
-
-    // Mean reversion pulls back toward intrinsic value
-    const reversion = -percentageDiff * this.meanReversion;
-
-    return momentum + reversion;
-  }
-
-  /**
-   * Set the actual market price after agent interactions
-   * This should be called after agents buy/sell at the current tick
-   * @param price - The price determined by agent trading
-   */
-  setMarketPrice(price: number): void {
-    this.marketPrice = Math.max(price, 0.01); // Ensure positive
-    this.priceHistory.push(this.marketPrice);
-    
-    // Keep only recent history (last 20 prices)
-    if (this.priceHistory.length > 20) {
-      this.priceHistory.shift();
-    }
-
-    // Adjust volatility based on price movement
-    this.adjustVolatility();
-  }
-
-  /**
-   * Adjust volatility based on recent price movements
-   * Large movements increase volatility (market instability)
-   */
-  private adjustVolatility(): void {
-    if (this.priceHistory.length < 3) return;
-
-    const recentPrices = this.priceHistory.slice(-5);
-    let totalChange = 0;
-    
-    for (let i = 1; i < recentPrices.length; i++) {
-      const lastPrice = recentPrices[i]
-      const prevPrice = recentPrices[i - 1]
-      if(typeof lastPrice !== 'number' || typeof prevPrice !== 'number' || prevPrice === 0) continue;
-
-      const change = Math.abs((lastPrice - prevPrice) / prevPrice);
-      totalChange += change;
-    }
-    
-    const avgChange = totalChange / (recentPrices.length - 1);
-    
-    // If market is volatile, slightly increase volatility (up to 50% increase)
-    if (avgChange > 0.05) {
-      this.volatility = Math.min(this.volatility * 1.05, this.volatility * 1.5);
-    } else {
-      // Gradually decay volatility back toward baseline during calm periods
-      this.volatility *= 0.99;
-    }
-  }
-
-  /**
-   * Apply a shock to the price generation
-   * @param size - Magnitude of shock (positive = upward shock, negative = downward)
-   *               Typical range: -1 to 1, but can be larger for extreme shocks
-   */
-  shock(size: number): void {
-    // Duration scales with shock size (larger shocks last longer)
-    const duration = Math.max(5, Math.floor(Math.abs(size) * 100));
-    console.log(`Applying shock: size=${size}, duration=${duration} ticks`);
     this.shockState = {
-      intensity: size,
-      duration: duration,
+      intensity,
       ticksRemaining: duration
     };
   }
 
   /**
-   * Apply a shock to the intrinsic price generation
-   * @param size - Magnitude of shock (positive = upward shock, negative = downward)
-   *               Typical range: -1 to 1, but can be larger for extreme shocks
-   * @param sidePreference - Value between -1 and 1 indicating bias direction
+   * Directly shock the intrinsic value
+   * This represents a fundamental change in the asset's value
+   * 
+   * @param percentageChange - Percentage to change intrinsic value (0.1 = +10%, -0.2 = -20%)
    */
-  intrinsicShock(size: number,sidePreference: number): void {
-
-    if(sidePreference < -1) sidePreference = -1;
-    if(sidePreference > 1) sidePreference = 1;
+  intrinsicShock(percentageChange: number): void {
+    const oldValue = this.intrinsicValue;
+    this.intrinsicValue *= (1 + percentageChange);
+    this.intrinsicValue = Math.max(this.intrinsicValue, 0.01); // Ensure positive
     
-    const direction = size >= 0 ? 1 : -1;
-    const newValue = this.intrinsicValue * (1 + direction * Math.abs(size) * (0.5 + 0.5 * sidePreference));
-    console.log(`Applying intrinsic shock: size=${size},pre:${this.intrinsicValue.toFixed(2)}, new intrinsic value=${newValue.toFixed(2)}`);
-    this.intrinsicValue = Math.max(newValue, 0.01);
-
+    console.log(`Intrinsic shock: ${oldValue.toFixed(2)} → ${this.intrinsicValue.toFixed(2)} (${(percentageChange * 100).toFixed(1)}%)`);
   }
 
   /**
-   * Get the current intrinsic value (pure fundamental, no pressure/shock)
+   * Gradually drift the intrinsic value (for slow fundamental changes)
+   * Call this occasionally (e.g., every 50-100 ticks) for realistic behavior
+   * 
+   * @param percentageChange - Small percentage drift (e.g., 0.02 = +2%)
    */
+  driftIntrinsicValue(percentageChange: number): void {
+    this.intrinsicValue *= (1 + percentageChange);
+    this.intrinsicValue = Math.max(this.intrinsicValue, 0.01);
+  }
+
+  // Getters
   getIntrinsicValue(): number {
-    return this.intrinsicValue;
+    return roundPrice(this.intrinsicValue);
   }
 
-  /**
-   * Get the current guide price (from random walk model with pressure/shock)
-   */
   getGuidePrice(): number {
-    return this.guidePrice;
+    return roundPrice(this.guidePrice);
   }
 
-  /**
-   * Get the current market price (after agent trading)
-   */
-  getMarketPrice(): number {
-    return this.marketPrice;
-  }
-
-  /**
-   * Get the current price without generating a new tick
-   * Returns market price if set, otherwise guide price
-   */
-  getCurrentPrice(): number {
-    return this.marketPrice;
-  }
-
-  /**
-   * Get the current tick count
-   */
   getTickCount(): number {
     return this.tickCount;
   }
 
-  /**
-   * Check if a shock is currently active
-   */
   isShockActive(): boolean {
     return this.shockState !== null && this.shockState.ticksRemaining > 0;
   }
 
   /**
-   * Reset the generator to initial state with a new seed
+   * Reset the generator to initial state
    */
   reset(newSeed?: number, newInitialPrice?: number): void {
     if (newSeed !== undefined) {
@@ -252,25 +146,21 @@ class StockPriceGenerator {
     if (newInitialPrice !== undefined) {
       this.intrinsicValue = newInitialPrice;
       this.guidePrice = newInitialPrice;
-      this.marketPrice = newInitialPrice;
-      this.priceHistory = [newInitialPrice];
     }
     this.tickCount = 0;
     this.shockState = null;
   }
 
   dispose(): void {
-    // Clean up resources if needed
-    this.reset();
-    this.priceHistory = [];
     this.shockState = null;
   }
 }
 
 export { StockPriceGenerator, type StockPriceConfig };
 
-
-
-export const priceTwoDecimal = (price:number, roundUp:boolean)=>{
-  return roundUp ? Math.ceil(price * 100) / 100 : Math.floor(price * 100) / 100;
-}
+  /**
+   * Round price to 2 decimal places (ceiling)
+   */
+export function roundPrice(price: number): number {
+    return Math.ceil(price * 100) / 100;
+  }

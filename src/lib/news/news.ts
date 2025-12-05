@@ -33,7 +33,7 @@ export class NewsFactory{
             const scheduleNextNews = () => {
                 const timeoutDuration = Math.abs((30 + Math.floor(this.random()*15))) * 1000; // between 15 and 45 seconds
                 this.nextRandomNewsTimeout = setTimeout(() => {
-                    if(this.simulator._paused){
+                    if(this.simulator.isPaused){
                         // If the simulator is paused, skip this news cycle
                         scheduleNextNews();
                         return;

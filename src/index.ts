@@ -1,9 +1,9 @@
 import { APIPowerHandler } from "./api/powers";
-import { parseJSON, parseMessageJson } from "./lib/parse";
+import { parseMessageJson } from "./lib/parse";
 import roomManager from "./lib/roomManager";
-import { MessageType } from "./types";
+import { MessageType, MessageTypeNames } from "./types";
 
-const server = Bun.serve<{roomId:string,id:string,username:string}>({
+const server = Bun.serve<{roomId:string,id:string,username:string,spectator?:boolean}>({
     port: process.env.PORT ? parseInt(process.env.PORT) : 3000,
     hostname:'localhost',
     // fetch(req) {
@@ -21,28 +21,62 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
         "/api/powers.json": APIPowerHandler,
         '/ws/:roomId': (req) => {
             const cookies = req.headers.get("x-room-ws-id");
+            // get roomID from params
+            const roomId = (req.params as any).roomId
             const searchParams = new URL(req.url).searchParams
+
+            // get userId from cookie
             const userId = cookies ? cookies : crypto.randomUUID();
+            const spectator = typeof searchParams.get("spectator") === "string";
             const username = searchParams.get("username") || crypto.randomUUID();
-            req.cookies.set("x-room-ws-id", userId, {httpOnly:true, sameSite:"lax"});
-            req.cookies.set("x-room-ws-username", username, {httpOnly:true, sameSite:"lax"});
-            if (server.upgrade(req,{
-                data:{roomId:(req.params as any).roomId,id:userId,username}
-            })) {
-                return; 
+            const prevSessionData = searchParams.get("prevSessionData")
+
+            const upgrade = ({room,id,username,spectator}:{
+                room:string,
+                id:string,
+                username:string,
+                spectator?:boolean
+            })=>{
+                req.cookies.set("x-room-ws-id", id, {httpOnly:true, sameSite:"lax"});
+
+                return server.upgrade(req,{
+                    data:{roomId:room,id,username,spectator}
+                })
             }
+
+            /**
+             * If no userId cookie, try to extract from socketId param from URL (used when reconnecting )
+             */
+            if(typeof prevSessionData === "string"){
+                const splitted = prevSessionData.split("-")
+                const room = splitted[0];
+                const id = splitted.slice(1).join("-")
+
+                // Check that roomId from URL matches room from params
+                if(room && roomId === room && id){
+
+                    if(upgrade({room, id, username, spectator})){
+                        return;
+                    }
+                }
+            }
+
+            if(upgrade({room:(req.params as any).roomId, id:userId, username, spectator})){
+                return;
+            }
+
             return new Response('Upgrade failed', { status: 500 });
         }
     },
     websocket: {
-        data: {} as {roomId:string,id:string,username:string},
+        data: {} as {roomId:string,id:string,username:string,spectator?:boolean},
         open: (ws) => {
-
             if(!ws.data) {
                 ws.data = {
                     roomId: crypto.randomUUID(),
                     id: crypto.randomUUID(),
-                    username: crypto.randomUUID()
+                    username: crypto.randomUUID(),
+                    spectator:false
                 };
             }
 
@@ -53,12 +87,23 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
             let room = roomManager.getRoom(ws.data.roomId)
 
             if(!room){
+                if(ws.data.spectator){
+                    // Room does not exist, cannot join as spectator
+                    ws.send(JSON.stringify({type:MessageType.ERROR,message:"Room does not exist"}));
+                    ws.close();
+                    return;
+                }
                 room = roomManager.createRoom(ws.data.roomId);
             }
-            room.addClient(ws);
 
+            if(ws.data.spectator){
+                room.addSpectatorClient(ws);
+                console.log(`Spectator ${ws.data.username} connected to room ${ws.data.roomId} `);
+            }else{
+                room.addClient(ws);
+                console.log(`Client ${ws.data.username} connected to room ${ws.data.roomId} `);
+            }
 
-        console.log("Client connected");
         },
         message: (ws, message) => {
             const msg = parseMessageJson(String(message));
@@ -71,7 +116,7 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
 
             const room = roomManager.getRoom(ws.data.roomId)
             if(!room) return;
-            console.log("Received message:", msg);
+            console.log(`[MSG:${MessageTypeNames[msg.type]}]`, msg);
 
             if(msg.type === MessageType.STOCK_ACTION){
                 const client = room.getClient(ws.data.id)
@@ -106,10 +151,10 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
 
                 if(msg.type === MessageType.SHOCK){
                     if(msg.target === 'intrinsic'){
-                        room.simulator?.generator.intrinsicShock(room.randomGenerator.nextNormal()*3, 1);
+                        room.simulator?.generator.intrinsicShock(room.randomGenerator.nextNormal()*0.8 );
                         return;
                     }
-                    room.simulator?.generator.shock(room.randomGenerator.nextNormal()*50)
+                    room.simulator?.generator.shock(room.randomGenerator.nextNormal()*0.5)
                     return;
                 }
 
@@ -124,6 +169,7 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
                     room.clientMap.forEach(client=>{
                         room.sendRoomState(client);
                     })
+                    room.spectatorManager.sendRoomState()
                     return;
                 }
             }else{
@@ -143,11 +189,9 @@ const server = Bun.serve<{roomId:string,id:string,username:string}>({
                 console.log("Client disconnected for room", room.roomId);
                 const client = room.clientMap.get(ws.data.id)
                 if(client){
-                    room.removeClient(client)
-                }
-                if(room.clientMap.size === 0){
-                    room.dispose();
-                    roomManager.deleteRoom(room.roomId)
+                    client.markAsDisconnected();
+                }else {
+                    room.spectatorManager.removeSpectator(ws);
                 }
             }
         },
