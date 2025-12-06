@@ -142,21 +142,21 @@ export class Simulator {
 
         let lastPrice = this.marketPrice;
         let updatedPrice = guidePrice;
-        // this.bots.forEach(bot => {
-        //     // Should the bot cancel existing orders?
-        //     // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
+        this.bots.forEach(bot => {
+            // Should the bot cancel existing orders?
+            // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
 
-        //     if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,guidePrice)){
-        //         updatedPrice = this.marketPrice;
-        //         // console.log('updated price:',updatedPrice);
-        //         // this.generator.setMarketPrice(updatedPrice)
-        //         if(updatedPrice !== lastPrice){
-        //             this.onPrice?.(updatedPrice);
-        //             lastPrice = updatedPrice;
-        //         }
-        //     }
-        // });
-            this.onPrice?.(updatedPrice);
+            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,guidePrice)){
+                updatedPrice = this.marketPrice;
+                // console.log('updated price:',updatedPrice);
+                // this.generator.setMarketPrice(updatedPrice)
+                if(updatedPrice !== lastPrice){
+                    this.onPrice?.(updatedPrice);
+                    lastPrice = updatedPrice;
+                }
+            }
+        });
+            // this.onPrice?.(updatedPrice);
         this._intrinsicValue = intrinsicValue;
         this._guidePrice = guidePrice;
     }
