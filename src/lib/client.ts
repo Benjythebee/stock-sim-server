@@ -59,7 +59,6 @@ export class Client extends TradingParticipant{
     }
 
     handleStockAction(message: StockMessage) {
-        let order = null;
 
         const orderId = `${this.id}-$-${Date.now()}`
         if(message.action === 'BUY') {
@@ -72,7 +71,7 @@ export class Client extends TradingParticipant{
                         this._lockedCash += totalCost;
                         this.availableCash -= totalCost;
                     }
-                    order = this.room.simulator?.orderBookW.addMarketOrder(this.id,orderId, Side.BUY,q,onTotalCostComputed);
+                    this.room.simulator?.orderBookW.addMarketOrder(this.id,orderId, Side.BUY,q,onTotalCostComputed);
                 }
             }else{
                 const cost = decimal(Number(message.price) * q, 3);
@@ -80,7 +79,7 @@ export class Client extends TradingParticipant{
                     this._lockedCash += cost;
                     this.availableCash -= cost;
                     const p = Number(message.price)>0?Number(message.price):0;
-                    order = this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.BUY,p,q);
+                    this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.BUY,p,q);
                 }
             }
         }else if(message.action === 'SELL'){
@@ -92,12 +91,12 @@ export class Client extends TradingParticipant{
                         this._lockedShares += totalQ;
                         this.shares -= totalQ;
                     }
-                    order = this.room.simulator?.orderBookW.addMarketOrder(this.id,orderId, Side.SELL,q,onTotalCostComputed);
+                    this.room.simulator?.orderBookW.addMarketOrder(this.id,orderId, Side.SELL,q,onTotalCostComputed);
                 }else{
                     this._lockedShares += q;
                     this.shares -= q;
                     const p = Number(message.price)>0?Number(message.price):0;
-                    order = this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.SELL,p,q);
+                    this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.SELL,p,q);
                 }
             }
         }

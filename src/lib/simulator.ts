@@ -1,6 +1,6 @@
 import { OrderBook, Side } from 'nodejs-order-book'
 import { StockPriceGenerator } from './priceGenerator';
-import { InformedBot, LiquidityBot, MeanReversionBot, MomentumBot, RandomBot, type TradingBot } from './bot';
+import { InformedBot,PartiallyInformedBot, LiquidityBot, MeanReversionBot, MomentumBot, RandomBot, type TradingBot, getAllAvailableBots } from './bot';
 import { OrderBookWrapper } from './orderBookWrapper';
 import { parseJSON } from './parse';
 import type { SeededRandomGenerator } from './seededRandomGenerator';
@@ -8,7 +8,7 @@ import { Observable } from './observable';
 
 export type Snapshot = ReturnType<OrderBook['snapshot']>
 
-const botClasses = [LiquidityBot,InformedBot,RandomBot,MomentumBot,MeanReversionBot];
+const botClasses = getAllAvailableBots()
 
 export type SimulatorSettings = {
         initialPrice: number,
@@ -17,6 +17,7 @@ export type SimulatorSettings = {
         marketVolatility: number,
         marketInfluence: number,
         meanReversion: number,
+        botSelection?: string[],
     }
 
 export class Simulator {
@@ -34,8 +35,11 @@ export class Simulator {
     private _paused: boolean = true;
     bots: TradingBot[] = [];
     private settings : SimulatorSettings;
+    private timestampsForIntrinsicChanges: number[] = [];
 
     constructor(settings: Partial<SimulatorSettings> = {}) {
+
+        const {botSelection, ...restSettings} = settings;
 
         this.settings = {
             initialPrice: 10,
@@ -44,8 +48,13 @@ export class Simulator {
             marketInfluence: 0.02,
             marketVolatility: 0.05,
             meanReversion: 0.05,
-            ...settings
+            botSelection:botSelection??botClasses.map(ClassName=>ClassName.name),
+            ...restSettings
         };
+
+        if(this.settings.botSelection && this.settings.botSelection.length > 0){
+            this.settings.botSelection = this.settings.botSelection.filter((botType)=>botClasses.map(c=>c.name).includes(botType));
+        }
 
         this.orderBookW = new OrderBookWrapper();
         const generator = new StockPriceGenerator({
@@ -53,13 +62,26 @@ export class Simulator {
             drift: 0.0005,        // Slight upward trend
             volatility: this.settings.marketVolatility,     // 2% volatility
             seed: this.settings.seed,
+            meanReversionStrength: this.settings.meanReversion,
         });
         this.generator = generator;
 
         const clockTime = 1000; // 1 second
         
+        const endTime = Date.now() + this.settings.gameDuration*60*1000;
+        // 8 seconds (arbitrary buffer) or divide remaining time into 10 segments
+        const interval = Math.max(8000, (endTime - Date.now() - 8000) / 10);
+
+        let nextTimestamp = Date.now() + interval;
+        while(nextTimestamp < endTime - 8000) {
+            this.timestampsForIntrinsicChanges.push(nextTimestamp);
+            nextTimestamp += interval;
+        }
+
         this.clockInterval = setInterval(() => this.clockTick(clockTime), clockTime);
         this.tickInterval = setInterval(() => this.tick(), 200);
+
+
     }
 
     onPrice = undefined as ((price: number) => void) | undefined;
@@ -88,6 +110,12 @@ export class Simulator {
         this.clock += clockTime;
         this.totalTime += clockTime;
         this.onClockTick?.(this.clock);
+        
+        if(this.timestampsForIntrinsicChanges.length >0 && this.clock >= this.timestampsForIntrinsicChanges[0]!) {
+            this.generator.driftIntrinsicValue(0.05)
+            this.timestampsForIntrinsicChanges.shift();
+        }
+
         this.onClockObservable.notifyObservers(this.clock);
         this.onDebugPrices?.({
             intrinsicValue: this.intrinsicValue,
@@ -106,9 +134,11 @@ export class Simulator {
     }
 
     createBots(count:number,randomGenerator: SeededRandomGenerator) {
+        const allowedSelection = new Set(this.settings.botSelection);
+        const filteredBotClasses = botClasses.filter(botClass => allowedSelection.has(botClass.name));
         const random = randomGenerator.next.bind(randomGenerator);
         for(let i=0;i<count;i++){
-            const BotClass = botClasses[Math.floor(random() * random() * botClasses.length)]!;
+            const BotClass = filteredBotClasses[Math.floor(random() * random() * filteredBotClasses.length)]!;
             const bot = new BotClass(`${BotClass.name}${i}`, {
                 initialCash: this.settings.initialPrice*1000+100000, // inifinite cash for bots
                 initialShares: BotClass.name ==='LiquidityBot' ? 10 : Math.floor(random()*1000),
@@ -146,7 +176,7 @@ export class Simulator {
             // Should the bot cancel existing orders?
             // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
 
-            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,guidePrice)){
+            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,this.marketPrice)){
                 updatedPrice = this.marketPrice;
                 // console.log('updated price:',updatedPrice);
                 // this.generator.setMarketPrice(updatedPrice)

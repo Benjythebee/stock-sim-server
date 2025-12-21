@@ -1,3 +1,4 @@
+import { APIAvailableBots } from "./api/bots";
 import { APIPowerHandler } from "./api/powers";
 import { parseMessageJson } from "./lib/parse";
 import roomManager from "./lib/roomManager";
@@ -19,6 +20,7 @@ const server = Bun.serve<{roomId:string,id:string,username:string,spectator?:boo
         "/": new Response("OK"),
         "/zhealth": new Response("OK"),
         "/api/powers.json": APIPowerHandler,
+        "/api/bots.json": APIAvailableBots,
         '/ws/:roomId': (req) => {
             const cookies = req.headers.get("x-room-ws-id");
             // get roomID from params
@@ -151,10 +153,10 @@ const server = Bun.serve<{roomId:string,id:string,username:string,spectator?:boo
 
                 if(msg.type === MessageType.SHOCK){
                     if(msg.target === 'intrinsic'){
-                        room.simulator?.generator.intrinsicShock(room.randomGenerator.nextNormal()*0.8 );
+                        room.simulator?.generator.intrinsicShock(room.randomGenerator.nextIdentity()*0.8 );
                         return;
                     }
-                    room.simulator?.generator.shock(room.randomGenerator.nextNormal()*0.5)
+                    room.simulator?.generator.shock(room.randomGenerator.nextIdentity()*0.5)
                     return;
                 }
 

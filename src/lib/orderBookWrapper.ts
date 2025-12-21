@@ -180,6 +180,7 @@ export class OrderBookWrapper {
         processed.done.forEach(this.processDoneOrders)
         this.processPartialOrder(processed.partial,processed.partialQuantityProcessed)
         // console.log(this.orderByIDs)
+        return processed;
     }
 
     addMarketOrder(clientID:string,id:string, side: Side, quantity: number, onTotalCostComputed?: (X:{totalCost:number,totalQ:number})=>void) {
@@ -261,7 +262,7 @@ export class OrderBookWrapper {
         (doneOrders as IOrder[]).forEach(this.processDoneOrders)
         this.processPartialOrder(processed.partial,processed.partialQuantityProcessed)
 
-        return processed.quantityLeft
+        return processed
         // console.log(this.orderByIDs)
     }
 

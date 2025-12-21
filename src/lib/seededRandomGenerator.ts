@@ -17,6 +17,12 @@ export class SeededRandomGenerator {
         this.seed = (this.seed * 9301 + 49297) % 233280;
         return this.seed / 233280;
     }
+
+    nextIdentity(){
+        // Between -1 and 1
+        return this.next()*2 -1;
+    }
+
   /**
    * Box-Muller transform to generate normal distribution from uniform random
    */

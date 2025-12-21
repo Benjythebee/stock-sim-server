@@ -25,11 +25,11 @@ class StockPriceGenerator {
   private meanReversionStrength: number;
 
   constructor(config: StockPriceConfig) {
-    this.intrinsicValue = config.initialPrice;
     this.guidePrice = config.initialPrice;
     this.drift = config.drift;
     this.volatility = config.volatility;
     this.random = new SeededRandomGenerator(config.seed);
+    this.intrinsicValue = config.initialPrice*this.random.nextNormal()*0.5 + config.initialPrice;
     this.tickCount = 0;
     this.shockState = null;
     this.meanReversionStrength = config.meanReversionStrength ?? 0.05;
@@ -115,6 +115,8 @@ class StockPriceGenerator {
    * @param percentageChange - Small percentage drift (e.g., 0.02 = +2%)
    */
   driftIntrinsicValue(percentageChange: number): void {
+    const sign = this.random.next() < 0.5 ? -1 : 1;
+    percentageChange *= sign
     this.intrinsicValue *= (1 + percentageChange);
     this.intrinsicValue = Math.max(this.intrinsicValue, 0.01);
   }

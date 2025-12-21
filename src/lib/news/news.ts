@@ -54,7 +54,7 @@ export class NewsFactory{
     }
 
     random = ()=> {
-        return Math.abs(this.room.randomGenerator.nextNormal());
+        return this.room.randomGenerator.next()
     }
 
     addNews(newsDescription: NewsDescription) {

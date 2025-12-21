@@ -8,6 +8,7 @@ import { SeededRandomGenerator } from "./seededRandomGenerator";
 import { NewsFactory } from "./news/news";
 import { PowerFactory } from "./powers/power";
 import { SpectatorClientManager } from "./spectatorClient";
+import { getAllAvailableBots } from "./bot";
 
 export type WebSocketWithRoomData = Bun.ServerWebSocket<{
         roomId: string;
@@ -25,6 +26,7 @@ export type GameSettings = {
     enableRandomNews: boolean;
     bots: number;
     ticketName: string;
+    botSelection?: string[];
 }
 export class Room {
     roomId: string;
@@ -43,7 +45,7 @@ export class Room {
         enableRandomNews: true,
         openingPrice: 1,
         gameDuration: 5,
-        bots: 0,
+        bots: 1,
         ticketName: 'AAPL',
     }
     state: {
@@ -85,6 +87,7 @@ export class Room {
             marketVolatility: this.settings.marketVolatility,
             gameDuration: this.settings.gameDuration,
             meanReversion: 0.03,
+            botSelection: this.settings.botSelection,
         });
 
         this.simulator!.onPrice = (price)=>{
@@ -213,6 +216,11 @@ export class Room {
         if('bots' in settings && settings.bots! > 50) {
             settings.bots = 50;
         }
+
+        if('botSelection' in settings && Array.isArray((settings as any).botSelection)) {
+            settings.botSelection = settings.botSelection?.filter((botType)=>getAllAvailableBots().map((botClass)=>botClass.name).includes(botType));
+        }
+
         /**
          * Transform market volatility from percentage to decimal
          */
