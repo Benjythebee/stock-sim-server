@@ -237,6 +237,9 @@ abstract class TradingBot extends TradingParticipant {
           cancelSide(orders[1]);
       }
       return
+    }else{
+      cancelSide(orders[0]);
+      cancelSide(orders[1]);
     }
 
     
@@ -876,8 +879,139 @@ class RandomBot extends TradingBot {
   }
 }
 
+class SpreadTradingBot extends TradingBot {
+  override type: string = 'SpreadTradingBot';
+  static override description: string = 'Trades based on bid-ask spread analysis';
+  
+  private minSpreadPercentage: number;
+  private orderRefreshRate: number;
+  private lastOrderTime: number = 0;
+  
+  constructor(
+    id: string, 
+    config: Partial<InventoryConfig> & { 
+      minSpreadPercentage?: number;
+      orderRefreshRate?: number;
+    } = {
+      initialCash: 10000,
+      initialShares: 0,
+      orderSize: 10,
+      minSpreadPercentage: 0.5, // 0.5% minimum spread
+      orderRefreshRate: 5000 // Refresh orders every 5 seconds
+    }, 
+    debug: boolean = false
+  ) {
+    super(id, config, debug);
+    this.minSpreadPercentage = config.minSpreadPercentage || 0.5;
+    this.orderRefreshRate = config.orderRefreshRate || 5000;
+  }
 
-export { TradingBot, PartiallyInformedBot, InformedBot,LiquidityBot, MomentumBot, MeanReversionBot, RandomBot };
+  override makeDecision(
+    currentPrice: number,
+    priceHistory: number[],
+    simulator: Simulator,
+    snapshot: Snapshot,
+    intrinsicPrice?: number,
+    guidePrice?: number
+  ): boolean {
+    // Auto-cancel old orders periodically
+    this.autoCancelOldOrders(simulator,undefined, this.orderRefreshRate);
+    console.log(snapshot.bids.map((b)=>b.price),snapshot.asks.map((a)=>a.price))
+    // Get best bid and ask from snapshot
+    const bestBid = snapshot.bids[0]; // Highest bid
+    const bestAsk = snapshot.asks[0]; // Lowest ask
+    
+    if (!bestBid || !bestAsk) {
+      if (this.debug) {
+        console.log(`${this.id}: No sufficient market data`);
+      }
+      return false;
+    }
+
+    const bidPrice = bestBid.price;
+    const askPrice = bestAsk.price;
+    const spread = askPrice - bidPrice;
+    const spreadPercentage = (spread / currentPrice) * 100;
+
+    if (this.debug) {
+      console.log(`${this.id}: Bid: $${bidPrice}, Ask: $${askPrice}, Spread: ${spreadPercentage.toFixed(2)}%`);
+    }
+
+    // Calculate our target prices (place orders inside the spread)
+    const targetBuyPrice = bidPrice + (spread * 0.3); // 30% into the spread from bid
+    const targetSellPrice = askPrice - (spread * 0.3); // 30% into the spread from ask
+
+    let madeDecision = false;
+
+    // Only trade if spread is wide enough
+    if (spreadPercentage >= this.minSpreadPercentage) {
+      
+      // Place buy order if we have available cash and don't already have a buy at this price
+      if (this.availableCash >= targetBuyPrice * this.orderSize) {
+        if (!this.hasBuyOrders(snapshot, targetBuyPrice)) {
+          const buyResult = this.placeBuyOrder(
+            simulator,
+            targetBuyPrice,
+            this.orderSize,
+            'limit'
+          );
+          
+          if (buyResult && this.debug) {
+            console.log(`${this.id}: Placed BUY order at $${targetBuyPrice.toFixed(2)} for ${this.orderSize} shares`);
+          }
+          madeDecision = true;
+        }
+      }
+
+      // Place sell order if we have shares and don't already have a sell at this price
+      if (this.shares >= this.orderSize) {
+        if (!this.hasSellOrders(snapshot, targetSellPrice)) {
+          const sellResult = this.placeSellOrder(
+            simulator,
+            targetSellPrice,
+            this.orderSize,
+            'limit'
+          );
+          
+          if (sellResult && this.debug) {
+            console.log(`${this.id}: Placed SELL order at $${targetSellPrice.toFixed(2)} for ${this.orderSize} shares`);
+          }
+          madeDecision = true;
+        }
+      }
+    } else if (this.debug) {
+      console.log(`${this.id}: Spread too narrow (${spreadPercentage.toFixed(2)}% < ${this.minSpreadPercentage}%)`);
+    }
+
+    // Opportunistic market orders when price diverges significantly
+    // if (guidePrice && Math.abs(currentPrice - guidePrice) / guidePrice > 0.02) {
+    //   // If current price is much lower than guide price, buy
+    //   if (currentPrice < guidePrice * 0.98 && this.availableCash >= currentPrice * this.orderSize) {
+    //     this.placeBuyOrder(simulator, currentPrice, this.orderSize, 'market');
+    //     if (this.debug) {
+    //       console.log(`${this.id}: Market BUY - price undervalued`);
+    //     }
+    //     madeDecision = true;
+    //   }
+    //   // If current price is much higher than guide price, sell
+    //   else if (currentPrice > guidePrice * 1.02 && this.shares >= this.orderSize) {
+    //     this.placeSellOrder(simulator, currentPrice, this.orderSize, 'market');
+    //     if (this.debug) {
+    //       console.log(`${this.id}: Market SELL - price overvalued`);
+    //     }
+    //     madeDecision = true;
+    //   }
+    // }
+
+    return madeDecision;
+  }
+
+  override toString(): string {
+    return `SpreadTradingBot - ID: ${this.id}, Cash: $${this.availableCash.toFixed(2)}, Shares: ${this.shares}, Min Spread: ${this.minSpreadPercentage}%`;
+  }
+}
+
+export { TradingBot, SpreadTradingBot,PartiallyInformedBot, InformedBot,LiquidityBot, MomentumBot, MeanReversionBot, RandomBot };
 
 /**
  * List of activated (available) bots
@@ -888,6 +1022,7 @@ export const AVAILABLE_BOTS = new Map<new (...args: any[]) => TradingBot, boolea
   [MeanReversionBot, false],
   [InformedBot, true],
   [PartiallyInformedBot, true],
+  [SpreadTradingBot, true],
   [LiquidityBot, false],
   [RandomBot, true],
 ]);
