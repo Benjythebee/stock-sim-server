@@ -31,7 +31,6 @@ export type GameSettings = {
 export class Room {
     roomId: string;
     clientMap: Map<string, Client> = new Map();
-    orderBook: OrderBook;
     randomGenerator: SeededRandomGenerator
     simulator: Simulator | null = null;
     spectatorManager:SpectatorClientManager
@@ -58,7 +57,7 @@ export class Room {
     constructor(public roomManager: RoomManager, roomId: string) {
         this.roomId = roomId;
         this.clientMap = new Map();
-        this.orderBook = new OrderBook();
+
         this.state = {
             started: false,
             ended: false,
@@ -95,8 +94,7 @@ export class Room {
                 console.warn("No price generated in room", this.roomId,price);
                 return;
             }
-            const depth = this.simulator!.orderBookW.orderBook.depth();
-            this.sendToAll({type: MessageType.STOCK_MOVEMENT, price, depth});
+            this.sendToAll({type: MessageType.STOCK_MOVEMENT, price});
         }
         this.simulator.onDebugPrices = (prices)=>{
             if(!prices || typeof prices !== 'object'){
@@ -104,6 +102,10 @@ export class Room {
                 return;
             }
             this.sendToAll({type: MessageType.DEBUG_PRICES, intrinsicValue: prices.intrinsicValue, guidePrice: prices.guidePrice});
+        }
+
+        this.simulator.orderBookW.onOrderBookUpdate = (snapshot)=>{
+            this.sendToAll({type: MessageType.ORDER_BOOK_UPDATE, depth: snapshot});
         }
 
         this.simulator.onClockTick = (clock)=>{
@@ -130,7 +132,7 @@ export class Room {
                 this.simulator!.orderBookW.registerClientObserver(bot)
             })
 
-            console.log(`Created ${this.settings.bots} bots in room`, this.simulator.bots.map(b=>b.id));
+            // console.log(`Created ${this.settings.bots} bots in room`, this.simulator.bots.map(b=>b.id));
         }
 
         this.newsFactory = new NewsFactory(this, this.simulator!, this.settings.enableRandomNews);
@@ -345,5 +347,6 @@ export class Room {
     sendRoomState = (client:Client)=>{
     
         client.send({type:MessageType.ROOM_STATE, ...this.roomState} );
+        client.send({type:MessageType.ORDER_BOOK_UPDATE, depth: this.simulator?.orderBookW.orderBook.depth()|| [[],[]]} );
     }
 }

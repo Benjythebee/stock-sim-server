@@ -43,6 +43,11 @@ export class OrderBookWrapper {
         this.observerMap.set(participant.id,participant.onOrderProcessed);
     }
 
+    /**
+     * Callback when order book is updated set by the room
+     */
+    onOrderBookUpdate = (snapshot:[[number, number][], [number, number][]])=>{}
+
     getOrderByID(id:string) {
         return this.orderByIDs.get(id);
     }
@@ -179,7 +184,9 @@ export class OrderBookWrapper {
 
         processed.done.forEach(this.processDoneOrders)
         this.processPartialOrder(processed.partial,processed.partialQuantityProcessed)
-        // console.log(this.orderByIDs)
+
+        this.onOrderBookUpdate(this.orderBook.depth());
+
         return processed;
     }
 
@@ -190,7 +197,9 @@ export class OrderBookWrapper {
             side,
             size: quantity
         });
-
+        if(processed.err){
+            console.error(`OrderBook market order error: ${processed.err}`);
+        }
 
         // console.log(processed.done)
 
@@ -244,7 +253,6 @@ export class OrderBookWrapper {
             totalCost += decimal((processed.partial.price * processed.partialQuantityProcessed), 3);
             totalQ += processed.partialQuantityProcessed;
         }
-        
         doneOrders.forEach((order)=>{
             let i = clientOrders.get(order!.price);
             if(i) {
@@ -261,6 +269,11 @@ export class OrderBookWrapper {
 
         (doneOrders as IOrder[]).forEach(this.processDoneOrders)
         this.processPartialOrder(processed.partial,processed.partialQuantityProcessed)
+        
+        if(processed.partial || processed.done.length > 0 || processed.partialQuantityProcessed){
+            // Only update if something was processed
+            this.onOrderBookUpdate(this.orderBook.depth());
+        }
 
         return processed
         // console.log(this.orderByIDs)

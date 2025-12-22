@@ -558,22 +558,23 @@ class PartiallyInformedBot extends TradingBot {
       return false;
     }
     if(!this.lastIntrinsicValue){
-      this.lastIntrinsicValue = intrinsicValue + (1 + (this.random()-0.05)*0.2); // 2% noise
+      this.lastIntrinsicValue = intrinsicValue * (1 + (this.random()-0.05)*0.2); // 2% noise
     }
     
     if(this.originalLastIntrinsicValue !== intrinsicValue){
       this.originalLastIntrinsicValue = intrinsicValue;
       const lastNudgevalue = (1 + (this.random()-0.05)*0.2); // 2% noise
-      this.lastIntrinsicValue = intrinsicValue +lastNudgevalue
+      this.lastIntrinsicValue = intrinsicValue *lastNudgevalue
     }
-
 
     if(currentPrice < (intrinsicValue * 0.96)){
       this.autoCancelOldOrders(simulator, Side.BUY, 60000);
       // cleanup old orders
       if (this.availableCash > currentPrice * this.orderSize) {
         if(this.hasBuyOrders(snapshot,currentPrice)) return false;
-        const processed = this.placeBuyOrder(simulator, currentPrice, this.orderSize,'market');
+        // No asks - market order will be useless, make a limit order instead
+        const orderType  = snapshot.asks.length === 0 ? 'limit' : 'market';
+        const processed = this.placeBuyOrder(simulator, currentPrice, this.orderSize, orderType);
 
         if(processed?.partialQuantityProcessed){
           // Create a limit order to sell the processed quantity at a higher price;
@@ -590,7 +591,8 @@ class PartiallyInformedBot extends TradingBot {
 
       if (this.shares >= this.orderSize) {
         if(this.hasSellOrders(snapshot,currentPrice)) return false;
-        this.placeSellOrder(simulator, currentPrice, this.orderSize,'market');
+        const orderType  = snapshot.bids.length === 0 ? 'limit' : 'market';
+        this.placeSellOrder(simulator, currentPrice, this.orderSize, orderType);
         return true;
       }
     }

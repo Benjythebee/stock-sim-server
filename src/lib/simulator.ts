@@ -64,6 +64,7 @@ export class Simulator {
             seed: this.settings.seed,
             meanReversionStrength: this.settings.meanReversion,
         });
+
         this.generator = generator;
 
         const clockTime = 1000; // 1 second
@@ -165,7 +166,7 @@ export class Simulator {
 
     tick() {
         if(this._paused) return;
-        this.generateCachedSnapshot();
+        // const snapshot = this.generateCachedSnapshot();
 
         const {intrinsicValue,guidePrice} = this.generator.tick();
         // console.log(`New guide price: ${guidePrice.toFixed(2)} ${guidePrice < intrinsicValue ? '<' : '>'} ${intrinsicValue.toFixed(2)}`);
@@ -176,7 +177,7 @@ export class Simulator {
             // Should the bot cancel existing orders?
             // bot.shouldCancelOrders(this.marketPrice,this,this.snapshot,guidePrice,intrinsicValue);
 
-            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.snapshot,intrinsicValue,this.marketPrice)){
+            if(bot.makeDecision(this.marketPrice,this.generator.history,this,this.orderBookW.orderBook.snapshot(),intrinsicValue,this.marketPrice)){
                 updatedPrice = this.marketPrice;
                 // console.log('updated price:',updatedPrice);
                 // this.generator.setMarketPrice(updatedPrice)

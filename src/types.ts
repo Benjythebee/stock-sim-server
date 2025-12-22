@@ -22,6 +22,7 @@ export enum MessageType {
     NEWS = 14,
     NOTIFICATION = 15,
     CLIENT_STATE = 16,
+    ORDER_BOOK_UPDATE= 17,
 
     ADMIN_SETTINGS = 30,
 
@@ -55,6 +56,7 @@ export const MessageTypeNames: { [key in MessageType]: string } = {
     [MessageType.NEWS]: "NEWS",
     [MessageType.NOTIFICATION]: "NOTIFICATION",
     [MessageType.CLIENT_STATE]: "CLIENT_STATE",
+    [MessageType.ORDER_BOOK_UPDATE]: "ORDER_BOOK_UPDATE",
     // Admin Messages - 30
     [MessageType.ADMIN_SETTINGS]: "ADMIN_SETTINGS",
 
@@ -161,6 +163,11 @@ type AdminSettingMessage = {
     settings: Partial<GameSettings>;
 }
 
+type OrderBookUpdateMessage = {
+    type: MessageType.ORDER_BOOK_UPDATE;
+    depth: [[number, number][], [number, number][]]
+}
+
 type PortfolioUpdateMessage = {
     type: MessageType.PORTFOLIO_UPDATE;
     id: string;
@@ -182,7 +189,6 @@ type StockMessage = {
 type StockMovementMessage = {
     type: MessageType.STOCK_MOVEMENT;
     price: number;
-    depth: [[number, number][], [number, number][]]
 }
 
 type DebugPricesMessage = {
@@ -225,7 +231,7 @@ type PowerInventoryMessage = {
 }
 
 
-export type Message = IDMessage | JoinMessage | LeaveMessage | IsShockMessage | NotificationMessage | NewsMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
+export type Message = IDMessage | JoinMessage | LeaveMessage | IsShockMessage | NotificationMessage | NewsMessage | OrderBookUpdateMessage |RoomStateMessage | TogglePauseMessage | PortfolioUpdateMessage| IsAdminMessage | AdminSettingMessage | ClockMessage | PingMessage | PongMessage | ChatMessage | ErrorMessage | StockMessage | StockMovementMessage | DebugPricesMessage | ConclusionMessage |
 PowerOffersMessage | PowerSelectedMessage | PowerConsumeMessage | PowerInventoryMessage |ClientStateMessage
 
 export type {
@@ -243,6 +249,7 @@ export type {
     ErrorMessage,
     StockMessage,
     NewsMessage,
+    OrderBookUpdateMessage,
     ClientStateMessage,
     AdminSettingMessage,
     PortfolioUpdateMessage,

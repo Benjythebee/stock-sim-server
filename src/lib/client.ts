@@ -79,7 +79,16 @@ export class Client extends TradingParticipant{
                     this._lockedCash += cost;
                     this.availableCash -= cost;
                     const p = Number(message.price)>0?Number(message.price):0;
-                    this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.BUY,p,q);
+                    const processed = this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.BUY,p,q);
+                    if(processed?.done.length ===0 || (processed?.partialQuantityProcessed || 0) >0){
+                        /**
+                         * If nothing happened on order placement, still update portfolio and orderbook
+                         */
+                        this.onPortfolioUpdate?.(this.portfolio)
+                        const depth = this.room.simulator!.orderBookW.orderBook.depth();
+                        const marketPrice = this.room.simulator!.marketPrice;
+                        this.room.sendToAll({type: MessageType.STOCK_MOVEMENT, price:marketPrice, depth})
+                    }
                 }
             }
         }else if(message.action === 'SELL'){
@@ -96,7 +105,16 @@ export class Client extends TradingParticipant{
                     this._lockedShares += q;
                     this.shares -= q;
                     const p = Number(message.price)>0?Number(message.price):0;
-                    this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.SELL,p,q);
+                    const processed = this.room.simulator?.orderBookW.addLimitOrder(this.id,orderId,Side.SELL,p,q);
+                    if(processed?.done.length ===0 || (processed?.partialQuantityProcessed || 0) >0){
+                        /**
+                         * If nothing happened on order placement, still update portfolio
+                         */
+                        this.onPortfolioUpdate?.(this.portfolio)
+                        const depth = this.room.simulator!.orderBookW.orderBook.depth();
+                        const marketPrice = this.room.simulator!.marketPrice;
+                        this.room.sendToAll({type: MessageType.STOCK_MOVEMENT, price:marketPrice, depth})
+                    }
                 }
             }
         }
