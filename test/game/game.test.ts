@@ -25,6 +25,19 @@ describe("Game", () => {
         expect(debug.at(-1)!.intrinsicValue).toBe(revealed.game.model.intrinsicValue);
     });
 
+    test("disableRandomWalk stops the periodic fair-value drift", () => {
+        const still = makeGame({ gameDuration: 1, disableRandomWalk: true });
+        const start = still.game.model.intrinsic;
+        runSeconds(still.game, 60);
+        expect(still.game.model.intrinsic).toBe(start);
+        expect(still.game.model.randomWalk).toBe(false);
+
+        const drifting = makeGame({ gameDuration: 1 });
+        const before = drifting.game.model.intrinsic;
+        runSeconds(drifting.game, 60);
+        expect(drifting.game.model.intrinsic).not.toBe(before);
+    });
+
     test("ends after gameDuration with a conclusion, and stops advancing", () => {
         const { game, broadcasts } = makeGame({ gameDuration: 1 });
         const { player } = makePlayer();

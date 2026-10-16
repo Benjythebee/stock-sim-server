@@ -307,6 +307,22 @@ describe("Room: trading", () => {
         expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Market closed" });
     });
 
+    test("disableLimitOrders refuses players' limit orders but keeps market orders", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { disableLimitOrders: true } });
+        expect(a.socket.last(MessageType.ROOM_STATE)!.settings.disableLimitOrders).toBe(true);
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.game.advance(); // the house quotes
+        const bookBefore = room.game.market.book.size;
+        room.handle(a.socket, buy(0.5, 10));
+        expect(room.game.market.book.size).toBe(bookBefore);
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Order rejected", description: expect.stringContaining("Limit orders are disabled") });
+
+        room.handle(a.socket, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "MARKET", quantity: 1, price: 0 });
+        expect(room.game.players()[0]!.account.shares).toBe(1);
+    });
+
     test("orders while running hit the book; rejections are explained", async () => {
         const { room, join } = lobby();
         const a = join("alice");

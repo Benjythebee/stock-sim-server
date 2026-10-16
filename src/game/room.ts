@@ -162,6 +162,9 @@ export class Room {
         switch (msg.type) {
             case MessageType.STOCK_ACTION: {
                 if (this.phase !== "running") return this.tell(player, "warning", "Market closed", "Orders open when the game is running.");
+                if (msg.orderType === "LIMIT" && this.settings.disableLimitOrders) {
+                    return this.tell(player, "error", "Order rejected", "Limit orders are disabled in this game. Use a market order.");
+                }
                 if (!player.orderLimiter.take()) {
                     const now = Date.now();
                     if (now - player.rateLimitedNotified > 2000) {

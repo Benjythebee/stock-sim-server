@@ -10,6 +10,8 @@ export interface PriceModelConfig {
     volatility: number;
     /** 0..1, how strongly the guide price is pulled toward the intrinsic value each step. */
     meanReversion: number;
+    /** False = no random noise in the guide price unless a volatility boost is active. Default true. */
+    randomWalk?: boolean;
     /** Steps of guide-price history to keep for bots. */
     historySize?: number;
 }
@@ -33,6 +35,7 @@ export class PriceModel {
     baseVolatility: number;
     drift: number;
     meanReversion: number;
+    randomWalk: boolean;
     readonly history: RingBuffer;
     steps = 0;
 
@@ -44,6 +47,7 @@ export class PriceModel {
         this.baseVolatility = config.volatility;
         this.drift = config.drift;
         this.meanReversion = config.meanReversion;
+        this.randomWalk = config.randomWalk ?? true;
         // Start the fair value somewhere around the opening price (never below 20% of it).
         this.intrinsic = Math.max(config.initialPrice * 0.2, config.initialPrice * (1 + rng.normal() * 0.25));
         this.history = new RingBuffer(config.historySize ?? 512);
@@ -70,7 +74,9 @@ export class PriceModel {
         }
         totalDrift += -((this.guide - this.intrinsic) / this.intrinsic) * this.meanReversion;
 
-        const sigma = this.volatility;
+        // Without the random walk the guide only follows drift, shocks and mean reversion, but a
+        // volatility boost (Volatility Storm) still shakes it.
+        const sigma = this.randomWalk || this.volatilityBoosts.size > 0 ? this.volatility : 0;
         const change = totalDrift - 0.5 * sigma * sigma + sigma * this.rng.normal();
         this.guide = Math.max(0.01, this.guide * Math.exp(change));
         this.history.push(this.guide);

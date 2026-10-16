@@ -37,6 +37,12 @@ describe("applySettingsUpdate", () => {
         expect(DEFAULT_SETTINGS.revealPrices).toBe(false);
         expect(apply({ revealPrices: true }).revealPrices).toBe(true);
         expect(apply({ revealPrices: 1 }).revealPrices).toBe(false);
+        expect(DEFAULT_SETTINGS.disableLimitOrders).toBe(false);
+        expect(apply({ disableLimitOrders: true }).disableLimitOrders).toBe(true);
+        expect(apply({ disableLimitOrders: "true" }).disableLimitOrders).toBe(false);
+        expect(DEFAULT_SETTINGS.disableRandomWalk).toBe(false);
+        expect(apply({ disableRandomWalk: true }).disableRandomWalk).toBe(true);
+        expect(apply({ disableRandomWalk: 1 }).disableRandomWalk).toBe(false);
     });
 
     test("ticker is sanitized", () => {

@@ -57,6 +57,28 @@ describe("PriceModel", () => {
         expect(m.volatility).toBeCloseTo(0.05);
     });
 
+    test("without the random walk the guide only moves on drift and mean reversion, until a volatility boost", () => {
+        const m = make(4, { randomWalk: false });
+        m.intrinsic = m.guide;
+        for (let i = 0; i < 100; i++) m.step();
+        expect(m.guide).toBe(10);
+
+        m.intrinsic = 20;
+        let last = m.guide;
+        for (let i = 0; i < 50; i++) {
+            m.step();
+            expect(m.guide).toBeGreaterThan(last); // a smooth climb toward fair value, no noise
+            last = m.guide;
+        }
+
+        m.intrinsic = m.guide;
+        const release = m.boostVolatility(2);
+        m.step();
+        expect(m.guide).not.toBeCloseTo(m.intrinsic, 6);
+        release();
+        expect(m.volatility).toBeCloseTo(0.05);
+    });
+
     test("volatility is capped", () => {
         const m = make();
         m.boostVolatility(1000);

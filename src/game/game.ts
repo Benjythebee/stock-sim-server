@@ -105,6 +105,7 @@ export class Game {
                 drift: 0.0005,
                 volatility: settings.marketVolatility,
                 meanReversion: 0.03,
+                randomWalk: !settings.disableRandomWalk,
             },
             this.rng.fork(1),
         );
@@ -118,7 +119,9 @@ export class Game {
 
         // Slow fundamental drift: ~10 nudges of ±5% over the game.
         const interval = Math.max(8, (this.durationSeconds - 8) / 10);
-        for (let t = interval; t < this.durationSeconds - 8; t += interval) this.intrinsicDriftAt.push(Math.round(t));
+        if (!settings.disableRandomWalk) {
+            for (let t = interval; t < this.durationSeconds - 8; t += interval) this.intrinsicDriftAt.push(Math.round(t));
+        }
     }
 
     get durationSeconds(): number {

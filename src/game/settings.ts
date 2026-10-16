@@ -23,6 +23,13 @@ export interface GameSettings {
      * Off by default: it gives away the answer, and anyone can read it off the socket.
      */
     revealPrices: boolean;
+    /** Players can only place market orders (bots and the house still quote with limit orders). */
+    disableLimitOrders: boolean;
+    /**
+     * Turn off the random noise in the guide price and the periodic drift of the fair value, so the
+     * price only moves on news, powers, trades and mean reversion. Volatility Storm still adds noise.
+     */
+    disableRandomWalk: boolean;
 }
 
 /** What clients see (identical today, kept as its own name so the two can diverge). */
@@ -39,6 +46,8 @@ export const DEFAULT_SETTINGS: Readonly<GameSettings> = Object.freeze({
     ticketName: "AAPL",
     houseLiquidity: true,
     revealPrices: false,
+    disableLimitOrders: false,
+    disableRandomWalk: false,
 });
 
 export const LIMITS = {
@@ -89,6 +98,8 @@ export function applySettingsUpdate(
     if (typeof update.enableRandomNews === "boolean") next.enableRandomNews = update.enableRandomNews;
     if (typeof update.houseLiquidity === "boolean") next.houseLiquidity = update.houseLiquidity;
     if (typeof update.revealPrices === "boolean") next.revealPrices = update.revealPrices;
+    if (typeof update.disableLimitOrders === "boolean") next.disableLimitOrders = update.disableLimitOrders;
+    if (typeof update.disableRandomWalk === "boolean") next.disableRandomWalk = update.disableRandomWalk;
 
     if (typeof update.ticketName === "string") {
         const ticker = update.ticketName.replace(/[^A-Za-z0-9.]/g, "").toUpperCase().slice(0, LIMITS.tickerLength);
