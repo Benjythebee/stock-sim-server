@@ -6,15 +6,19 @@ import type { DynamicText } from "../text";
 
 export type NewsText = DynamicText;
 
-export interface NewsContext {
+export interface NewsContext<S = unknown> {
     readonly game: Game;
     readonly market: Market;
     readonly model: PriceModel;
     readonly rng: Rng;
+    /** Per-publication state from `definition.state()` (headlines are shared by every room). */
+    readonly state: S;
+    /** Publish another headline right now, e.g. a follow-up when this one ends. */
+    publish(news: NewsDefinition): void;
 }
 
 /** A headline. Effects (if any) usually move the fair value in onStart. */
-export interface NewsDefinition {
+export interface NewsDefinition<S extends object = Record<string, never>> {
     title: NewsText;
     description: NewsText;
     /** How long the headline stays "live" in the UI, in game seconds. */
@@ -24,10 +28,16 @@ export interface NewsDefinition {
      * Declared as data (rather than inside onStart) so powers can tell what a headline will do.
      */
     fairValueShock?: number;
-    onStart?(ctx: NewsContext): void;
+    /**
+     * Fresh state for each publication. Store temporary effects' release functions here (e.g.
+     * `model.boostVolatility()`) and call them in onEnd.
+     */
+    state?: () => S;
+    onStart?(ctx: NewsContext<S>): void;
     /** Every game second while live. */
-    onTick?(ctx: NewsContext): void;
-    onEnd?(ctx: NewsContext): void;
+    onTick?(ctx: NewsContext<S>): void;
+    /** When the duration runs out. */
+    onEnd?(ctx: NewsContext<S>): void;
 }
 
 /** A headline that's coming soon, as revealed by NewsManager.upcoming(). */
@@ -37,6 +47,6 @@ export interface UpcomingNews {
     inSeconds: number;
 }
 
-export function defineNews(news: NewsDefinition): NewsDefinition {
-    return news;
+export function defineNews<S extends object = Record<string, never>>(news: NewsDefinition<S>): NewsDefinition {
+    return news as NewsDefinition;
 }

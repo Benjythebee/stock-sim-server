@@ -182,4 +182,17 @@ describe("Game", () => {
         expect(game.bots).toHaveLength(7);
         expect(new Set(game.bots.map((b) => b.type))).toEqual(new Set(["RandomBot", "MomentumBot"]));
     });
+    test("sweep: an outside buyer lifts offers up to maxMove above the mark, capped at maxQty", () => {
+        const { game } = makeGame({ openingPrice: 10, houseLiquidity: false });
+        const { player: seller } = makePlayer("seller");
+        game.addPlayer(seller);
+        seller.account.adjustShares(300);
+        game.market.limit(seller.account, "sell", 10.05, 100);
+        game.market.limit(seller.account, "sell", 10.1, 100);
+        game.market.limit(seller.account, "sell", 10.5, 100); // beyond 2%
+        expect(game.sweep("buy", 0.02, 150)).toEqual({ filled: 150, worstPrice: 10.1 });
+        expect(game.sweep("buy", 0.02)).toEqual({ filled: 50, worstPrice: 10.1 });
+        expect(game.sweep("buy", 0.02)).toEqual({ filled: 0, worstPrice: null });
+        expect(seller.account.shares).toBe(100);
+    });
 });

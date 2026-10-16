@@ -109,7 +109,7 @@ scripts/                load.ts, simulate.ts
 - **Shape**: a mod is a single file or a folder with `index.ts`. Folders can ship assets: `icon: "robber-hand.svg"` resolves inside the mod folder and is served at `/assets/powers/<id>/...`; a missing or out-of-folder file degrades to the "missing" icon with a warning (it doesn't fail startup). Mods import from `"@mod"` only. Example: `mods/powers/siphon/`.
 - **Powers**: default-export `definePower({...})`. Use the `/add-power` skill.
 - **Bots**: default-export `defineBot({...})`. Use the `/add-bot` skill. Check behaviour with `bun run simulate -- --only YourBot`.
-- **News**: add a `defineNews({...})` to `src/news/catalog.ts`. Declare fair-value moves as `fairValueShock` (data, so powers like Embargoed Press Release can read them), not inside `onStart`.
+- **News**: add a `defineNews({...})` to `src/news/catalog.ts`. Declare fair-value moves as `fairValueShock` (data, so powers like Embargoed Press Release can read them), not inside `onStart`. Headline definitions are shared by every room, so keep release functions in `state: () => ({...})` (fresh per publication) and undo them in `onEnd`. Hooks can `publish()` a follow-up (`FOLLOW_UPS` in the catalog, not drawn at random) for two-act stories.
 - Hooks from mods run inside try/catch: a throwing power is logged and skipped, and a bot that throws 3 times is benched for the game.
 
 ## Conventions

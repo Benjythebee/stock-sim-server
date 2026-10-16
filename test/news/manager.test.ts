@@ -48,6 +48,54 @@ describe("NewsManager", () => {
         expect(calls).toEqual(["start", "tick", "tick", "end"]);
     });
 
+    test("each publication gets fresh state", () => {
+        const { game } = makeGame({}, catalogWith({ bots: noBots }));
+        const seen: { n: number }[] = [];
+        const news = defineNews({
+            title: "t",
+            description: "d",
+            durationSeconds: 2,
+            state: () => ({ n: 0 }),
+            onTick: ({ state }) => {
+                state.n++;
+            },
+            onEnd: ({ state }) => {
+                seen.push(state);
+            },
+        });
+        game.news.publish(news);
+        runSeconds(game, 1);
+        game.news.publish(news);
+        runSeconds(game, 3);
+        expect(seen).toEqual([{ n: 2 }, { n: 2 }]);
+        expect(seen[0]).not.toBe(seen[1]);
+    });
+
+    test("hooks can publish follow-up headlines, which then run their own hooks", () => {
+        const calls: string[] = [];
+        const { game, broadcasts } = makeGame({}, catalogWith({ bots: noBots }));
+        const followUp = defineNews({
+            title: "follow-up",
+            description: "d",
+            durationSeconds: 1,
+            onStart: () => calls.push("follow-up start"),
+            onEnd: () => calls.push("follow-up end"),
+        });
+        game.news.publish(
+            defineNews({
+                title: "first",
+                description: "d",
+                durationSeconds: 1,
+                onEnd: ({ publish }) => publish(followUp),
+            }),
+        );
+        runSeconds(game, 1);
+        expect(broadcasts.filter((m): m is NewsMessage => m.type === MessageType.NEWS).map((m) => m.title)).toEqual(["first", "follow-up"]);
+        expect(calls).toEqual(["follow-up start"]);
+        runSeconds(game, 1);
+        expect(calls).toEqual(["follow-up start", "follow-up end"]);
+    });
+
     test("catalog shocks move intrinsic value", () => {
         const { game } = makeGame();
         const before = game.model.intrinsic;

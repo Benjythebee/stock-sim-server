@@ -213,20 +213,33 @@ export class Game {
      * shares sold and the lowest fill price in dollars (null when there was nothing to hit).
      */
     dumpShares(maxDrop: number): { sold: number; lowPrice: number | null } {
-        const floor = this.market.markTicks * (1 - maxDrop);
+        const { filled, worstPrice } = this.sweep("sell", maxDrop);
+        return { sold: filled, lowPrice: worstPrice };
+    }
+
+    /**
+     * An outside (non-human) trader takes every resting order on the other side of the book up to
+     * `maxMove` away from the mark price (0.02 = 2%), with whatever cash or shares that needs.
+     * Doesn't touch the price model. Returns the shares traded and the worst fill price in dollars.
+     */
+    sweep(side: Side, maxMove: number, maxQty = Infinity): { filled: number; worstPrice: number | null } {
+        const buying = side === "buy";
+        const limit = this.market.markTicks * (buying ? 1 + maxMove : 1 - maxMove);
         let qty = 0;
-        let low: number | null = null;
-        for (const [price, levelQty] of this.market.book.depth(1000)[1]) {
-            if (price < floor) break;
-            qty += levelQty;
-            low = price;
+        let worst: number | null = null;
+        for (const [price, levelQty] of this.market.book.depth(1000)[buying ? 0 : 1]) {
+            if (buying ? price > limit : price < limit) break;
+            qty += Math.min(levelQty, maxQty - qty);
+            worst = price;
+            if (qty >= maxQty) break;
         }
-        if (qty === 0 || low === null) return { sold: 0, lowPrice: null };
+        if (qty === 0 || worst === null) return { filled: 0, worstPrice: null };
         this.rogue ??= this.market.add(new Account("rogue-trader", 0, 0, false));
-        this.rogue.adjustShares(qty);
-        const outcome = this.market.market(this.rogue, "sell", qty);
-        if (!outcome.ok) return { sold: 0, lowPrice: null };
-        return { sold: outcome.filled, lowPrice: toDollars(low) };
+        if (buying) this.rogue.adjustCash(worst * qty);
+        else this.rogue.adjustShares(qty);
+        const outcome = this.market.market(this.rogue, side, qty);
+        if (!outcome.ok) return { filled: 0, worstPrice: null };
+        return { filled: outcome.filled, worstPrice: toDollars(worst) };
     }
 
     /** Cancel one of a player's open orders (by OrderInfo id), or all of them. Returns how many were cancelled. */

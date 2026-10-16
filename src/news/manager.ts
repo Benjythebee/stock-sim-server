@@ -5,6 +5,31 @@ import { MessageType } from "../protocol/messages";
 import { resolveText } from "../text";
 import type { NewsContext, NewsDefinition, UpcomingNews } from "./types";
 
+/** One publication of a headline: its own state and countdown (definitions are shared by every room). */
+class Publication implements NewsContext {
+    constructor(
+        private readonly manager: NewsManager,
+        readonly news: NewsDefinition<any>,
+        readonly state: unknown,
+        public secondsLeft: number,
+    ) {}
+
+    get game() {
+        return this.manager.game;
+    }
+    get market() {
+        return this.manager.game.market;
+    }
+    get model() {
+        return this.manager.game.model;
+    }
+    get rng() {
+        return this.manager.rng;
+    }
+    /** An arrow function, so hooks can destructure it: `onEnd: ({ publish }) => ...`. */
+    readonly publish = (news: NewsDefinition): void => this.manager.publish(news);
+}
+
 /** Random headlines arrive every 30-45 game seconds. */
 export const NEWS_INTERVAL_SECONDS: readonly [min: number, max: number] = [30, 45];
 
@@ -12,8 +37,8 @@ export const NEWS_INTERVAL_SECONDS: readonly [min: number, max: number] = [30, 4
  * Publishes headlines (random ones from the catalog, plus any pushed by powers) and runs their
  * effects. Everything is scheduled in game seconds, so pausing the game pauses the news too.
  */
-export class NewsManager implements NewsContext {
-    private live: { news: NewsDefinition; secondsLeft: number }[] = [];
+export class NewsManager {
+    private live: Publication[] = [];
     /** The next catalog headline, picked early once a power has revealed it. */
     private next: NewsDefinition | null = null;
     /** Game second the next catalog headline is due (Infinity: none, random news is off). */
@@ -30,19 +55,11 @@ export class NewsManager implements NewsContext {
         this.nextAt = randomNews ? delay : Infinity;
     }
 
-    get market() {
-        return this.game.market;
-    }
-
-    get model() {
-        return this.game.model;
-    }
-
     publish(news: NewsDefinition): void {
         const ticker = this.game.settings.ticketName;
         const durationSeconds = news.durationSeconds ?? 0;
         this.published++;
-        if (news.fairValueShock) this.model.shockIntrinsic(news.fairValueShock);
+        if (news.fairValueShock) this.game.model.shockIntrinsic(news.fairValueShock);
         this.game.broadcast({
             type: MessageType.NEWS,
             title: resolveText(news.title, ticker),
@@ -50,8 +67,9 @@ export class NewsManager implements NewsContext {
             timestamp: this.game.clock,
             durationTicks: durationSeconds,
         });
-        this.run(news, "onStart");
-        if (durationSeconds > 0 && (news.onTick || news.onEnd)) this.live.push({ news, secondsLeft: durationSeconds });
+        const publication = new Publication(this, news, news.state ? news.state() : {}, durationSeconds);
+        this.run(publication, "onStart");
+        if (durationSeconds > 0 && (news.onTick || news.onEnd)) this.live.push(publication);
     }
 
     /**
@@ -76,12 +94,14 @@ export class NewsManager implements NewsContext {
             this.nextAt = this.randomNews ? elapsedSeconds + delay : Infinity;
         }
         if (this.live.length === 0) return;
-        this.live = this.live.filter((item) => {
-            this.run(item.news, "onTick");
-            if (--item.secondsLeft > 0) return true;
-            this.run(item.news, "onEnd");
-            return false;
-        });
+        // Hooks may publish follow-up headlines, which land in the fresh list (and tick from next second).
+        const live = this.live;
+        this.live = [];
+        for (const item of live) {
+            this.run(item, "onTick");
+            if (--item.secondsLeft > 0) this.live.push(item);
+            else this.run(item, "onEnd");
+        }
     }
 
     dispose(): void {
@@ -93,11 +113,11 @@ export class NewsManager implements NewsContext {
         return min + this.rng.int(max - min + 1);
     }
 
-    private run(news: NewsDefinition, hook: "onStart" | "onTick" | "onEnd"): void {
+    private run(publication: Publication, hook: "onStart" | "onTick" | "onEnd"): void {
         try {
-            news[hook]?.(this);
+            publication.news[hook]?.(publication);
         } catch (err) {
-            log.error(`news "${resolveText(news.title, this.game.settings.ticketName)}" ${hook} threw`, err);
+            log.error(`news "${resolveText(publication.news.title, this.game.settings.ticketName)}" ${hook} threw`, err);
         }
     }
 }
