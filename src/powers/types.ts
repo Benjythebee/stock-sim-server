@@ -1,7 +1,9 @@
 import type { Market } from "../engine/market";
 import type { PriceModel } from "../engine/price-model";
 import type { Rng } from "../engine/rng";
-import type { Game } from "../game/game";
+import type { Side } from "../engine/order-book";
+import type { OrderOutcome } from "../engine/market";
+import type { Game, PlayerTrade } from "../game/game";
 import type { Player } from "../game/player";
 import type { NewsDefinition, UpcomingNews } from "../news/types";
 import type { Notification } from "../protocol/messages";
@@ -82,6 +84,26 @@ export interface PowerContext<S> {
      * `withinSeconds`. Null if there are no headlines to draw from.
      */
     upcomingNews(withinSeconds: number): UpcomingNews | null;
+    /**
+     * Listen to human players' trades (see Game.onPlayerTrade). Delivered after matching, so the
+     * listener may trade. Unsubscribed automatically when the effect expires.
+     */
+    onPlayerTrade(listener: (trade: PlayerTrade) => void): void;
+    /** A market order on a player's behalf, recorded in their order history. */
+    marketOrder(player: Player, side: Side, qty: number): OrderOutcome;
+    /** A rogue trader sweeps the bids down to `maxDrop` below the mark (see Game.dumpShares). */
+    dumpShares(maxDrop: number): { sold: number; lowPrice: number | null };
+    /** Power effects active right now (other activations included), e.g. to find who is spying on you. */
+    activeEffects(): readonly ActiveEffect[];
+}
+
+/** A running (duration) power, as seen by other powers. */
+export interface ActiveEffect {
+    powerId: string;
+    player: Player;
+    /** That activation's state (shape defined by the power). */
+    state: unknown;
+    secondsLeft: number;
 }
 
 export interface IconCredit {

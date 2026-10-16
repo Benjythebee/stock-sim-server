@@ -6,7 +6,8 @@
  * Mods should only depend on what's exported here, so internals can change without breaking them.
  */
 export { definePower } from "./powers/types";
-export type { PowerContext, PowerDefinition, PowerTarget, IconCredit, PublicPower } from "./powers/types";
+export type { ActiveEffect, PowerContext, PowerDefinition, PowerTarget, IconCredit, PublicPower } from "./powers/types";
+export type { PlayerTrade } from "./game/game";
 
 export { defineBot, sharesWorth, referenceCash } from "./bots/types";
 export type { BotDefinition, BotStrategy, BotView } from "./bots/types";

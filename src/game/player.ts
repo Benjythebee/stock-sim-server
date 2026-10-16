@@ -42,6 +42,8 @@ export class Player {
     account: Account;
     orders = new OrderJournal();
     rateLimitedNotified = 0;
+    /** Active "hide my trades" effects (Burner Phone). Counted so overlapping effects stack. */
+    private concealment = 0;
 
     constructor(
         readonly id: string,
@@ -96,6 +98,25 @@ export class Player {
             if (released) return;
             released = true;
             account.impactShields--;
+        };
+    }
+
+    /** True while this player's trades are hidden from surveillance powers (Game.onPlayerTrade). */
+    get tradesConcealed(): boolean {
+        return this.concealment > 0;
+    }
+
+    /**
+     * Hide this player's trades from Game.onPlayerTrade listeners (Wiretap, Copycat) until the
+     * returned function is called. Stacks like lockTrading. Releasing twice is a no-op.
+     */
+    concealTrades(): () => void {
+        this.concealment++;
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            this.concealment--;
         };
     }
 

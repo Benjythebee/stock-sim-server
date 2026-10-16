@@ -5,7 +5,7 @@ import { defaultBotInventory } from "../bots/types";
 import { Account } from "../engine/account";
 import { Market, type OrderOutcome } from "../engine/market";
 import { toDollars, toTicks } from "../engine/money";
-import type { Fill, Order } from "../engine/order-book";
+import type { Fill, Order, Side } from "../engine/order-book";
 import { PriceModel } from "../engine/price-model";
 import { RingBuffer } from "../engine/ring-buffer";
 import { Rng } from "../engine/rng";
@@ -22,6 +22,7 @@ import {
     type ServerMessage,
     type StockActionMessage,
 } from "../protocol/messages";
+import { log } from "../log";
 import { OrderJournal } from "./orders";
 import { portfolioOf, type Player } from "./player";
 import type { GameSettings } from "./settings";
@@ -37,6 +38,20 @@ export interface Catalog {
     bots: BotRegistry;
     powers: PowerRegistry;
     news: readonly NewsDefinition[];
+}
+
+/**
+ * A player's fills from one order (or one flush), aggregated per side. What surveillance powers
+ * (Wiretap, Copycat) listen to through `Game.onPlayerTrade`.
+ */
+export interface PlayerTrade {
+    player: Player;
+    side: Side;
+    qty: number;
+    /** Volume-weighted fill price, in dollars. */
+    avgPrice: number;
+    /** Made by a power reacting to another trade (e.g. a Copycat copy), not by the player. */
+    automatic: boolean;
 }
 
 /** Where the game sends room-wide messages. Per-player messages go through Player.send. */
@@ -69,6 +84,11 @@ export class Game {
     private readonly playerMap = new Map<string, Player>();
     private readonly intrinsicDriftAt: number[] = [];
     private depthCache: { version: number; json: string } | null = null;
+    private readonly tradeListeners = new Set<(trade: PlayerTrade) => void>();
+    private tradeFeed: { player: Player; side: Side; qty: number; ticks: number; automatic: boolean }[] = [];
+    private dispatchingTrades = false;
+    /** The non-human account Fat Finger sells from (created on first use). */
+    private rogue: Account | null = null;
 
     constructor(
         readonly settings: Readonly<GameSettings>,
@@ -164,6 +184,51 @@ export class Game {
         return outcome;
     }
 
+    /** A market order on a player's behalf (from a power), recorded in their order history. */
+    marketOrder(player: Player, side: Side, qty: number): OrderOutcome {
+        return this.placeOrder(player, {
+            type: MessageType.STOCK_ACTION,
+            action: side === "buy" ? "BUY" : "SELL",
+            orderType: "MARKET",
+            quantity: qty,
+            price: 0,
+        });
+    }
+
+    /**
+     * Listen to human players' trades (both sides of every fill), aggregated per player and side
+     * and delivered at the next flush, after matching is done, so listeners may trade themselves.
+     * Players with `concealTrades()` active are left out. Returns the unsubscribe function.
+     */
+    onPlayerTrade(listener: (trade: PlayerTrade) => void): () => void {
+        this.tradeListeners.add(listener);
+        return () => {
+            this.tradeListeners.delete(listener);
+        };
+    }
+
+    /**
+     * A rogue (non-human) trader market-sells into the bids, sweeping every level down to
+     * `maxDrop` below the mark price (0.08 = 8%). Doesn't touch the price model. Returns the
+     * shares sold and the lowest fill price in dollars (null when there was nothing to hit).
+     */
+    dumpShares(maxDrop: number): { sold: number; lowPrice: number | null } {
+        const floor = this.market.markTicks * (1 - maxDrop);
+        let qty = 0;
+        let low: number | null = null;
+        for (const [price, levelQty] of this.market.book.depth(1000)[1]) {
+            if (price < floor) break;
+            qty += levelQty;
+            low = price;
+        }
+        if (qty === 0 || low === null) return { sold: 0, lowPrice: null };
+        this.rogue ??= this.market.add(new Account("rogue-trader", 0, 0, false));
+        this.rogue.adjustShares(qty);
+        const outcome = this.market.market(this.rogue, "sell", qty);
+        if (!outcome.ok) return { sold: 0, lowPrice: null };
+        return { sold: outcome.filled, lowPrice: toDollars(low) };
+    }
+
     /** Cancel one of a player's open orders (by OrderInfo id), or all of them. Returns how many were cancelled. */
     cancelOrder(player: Player, id: number): number {
         if (id === ORDER_CANCEL_ALL) return this.market.cancelAll(player.account);
@@ -173,6 +238,7 @@ export class Game {
 
     /** Push pending price/depth/portfolio changes to clients. Cheap when nothing changed. */
     flush(): void {
+        if (this.tradeFeed.length) this.dispatchTrades();
         const market = this.market;
         if (market.priceDirty) {
             market.markPricePublished();
@@ -245,6 +311,8 @@ export class Game {
         this.news.dispose();
         this.market.onTrade = null;
         this.market.onCancel = null;
+        this.tradeListeners.clear();
+        this.tradeFeed = [];
         this.market.book.clear();
         this.bots.length = 0;
         this.playerMap.clear();
@@ -276,12 +344,59 @@ export class Game {
 
     private readonly onTrade = (fill: Fill, taker: Account, maker: Account) => {
         if (maker.isHuman) this.playerMap.get(maker.id)?.orders.filled(fill.makerOrderId, fill.price, fill.qty, fill.makerDone, this.stepClock);
+        if (this.tradeListeners.size) {
+            const automatic = this.dispatchingTrades;
+            const ticks = fill.price * fill.qty;
+            const takerPlayer = taker.isHuman ? this.playerMap.get(taker.id) : undefined;
+            const makerPlayer = maker.isHuman ? this.playerMap.get(maker.id) : undefined;
+            if (takerPlayer) this.tradeFeed.push({ player: takerPlayer, side: fill.takerSide, qty: fill.qty, ticks, automatic });
+            if (makerPlayer) this.tradeFeed.push({ player: makerPlayer, side: fill.takerSide === "buy" ? "sell" : "buy", qty: fill.qty, ticks, automatic });
+        }
         // Human takers move the guide price: bigger trades, more impact (unless they're in a dark pool).
         if (!taker.isHuman || taker.impactShields > 0) return;
         const notional = toDollars(fill.price * fill.qty);
         const weight = Math.min(1, Math.max(0.05, notional / (Math.max(1000, this.settings.startingCash) * 0.05)));
         this.model.absorbTrade(toDollars(fill.price), weight);
     };
+
+    /** Deliver queued trades to listeners. Trades the listeners make go out next round, marked automatic. */
+    private dispatchTrades(): void {
+        for (let round = 0; round < 4 && this.tradeFeed.length; round++) {
+            const merged = new Map<string, { player: Player; side: Side; qty: number; ticks: number; automatic: boolean }>();
+            for (const e of this.tradeFeed) {
+                if (e.player.tradesConcealed) continue;
+                const key = `${e.player.id}:${e.side}:${e.automatic}`;
+                const m = merged.get(key);
+                if (m) {
+                    m.qty += e.qty;
+                    m.ticks += e.ticks;
+                } else merged.set(key, { ...e });
+            }
+            this.tradeFeed = [];
+            this.dispatchingTrades = true;
+            try {
+                for (const m of merged.values()) {
+                    const trade: PlayerTrade = {
+                        player: m.player,
+                        side: m.side,
+                        qty: m.qty,
+                        avgPrice: toDollars(Math.round(m.ticks / m.qty)),
+                        automatic: m.automatic,
+                    };
+                    for (const listener of [...this.tradeListeners]) {
+                        try {
+                            listener(trade);
+                        } catch (err) {
+                            log.error("trade listener threw", err);
+                        }
+                    }
+                }
+            } finally {
+                this.dispatchingTrades = false;
+            }
+        }
+        this.tradeFeed = []; // a runaway chain of reactions stops here
+    }
 
     private readonly onCancel = (order: Order, account: Account) => {
         if (account.isHuman) this.playerMap.get(account.id)?.orders.cancelled(order.id, this.stepClock);

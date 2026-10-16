@@ -6,7 +6,9 @@ import { log } from "../log";
 import type { NewsDefinition } from "../news/types";
 import { MessageType, type Notification } from "../protocol/messages";
 import type { PowerRegistry } from "./registry";
-import type { AnyPowerDefinition, PowerContext, PublicPower } from "./types";
+import type { Side } from "../engine/order-book";
+import type { PlayerTrade } from "../game/game";
+import type { ActiveEffect, AnyPowerDefinition, PowerContext, PublicPower } from "./types";
 
 /** Offers per briefcase. */
 export const OFFERS_PER_BRIEFCASE = 3;
@@ -24,6 +26,8 @@ export function briefcaseSchedule(durationSeconds: number): number[] {
 
 class Activation implements PowerContext<any> {
     secondsLeft: number;
+    /** Undo functions for subscriptions made through the context, run when the effect ends. */
+    readonly cleanups: (() => void)[] = [];
 
     constructor(
         readonly definition: AnyPowerDefinition,
@@ -63,6 +67,18 @@ class Activation implements PowerContext<any> {
     upcomingNews(withinSeconds: number) {
         return this.game.news.upcoming(withinSeconds);
     }
+    onPlayerTrade(listener: (trade: PlayerTrade) => void) {
+        this.cleanups.push(this.game.onPlayerTrade(listener));
+    }
+    marketOrder(player: Player, side: Side, qty: number) {
+        return this.game.marketOrder(player, side, qty);
+    }
+    dumpShares(maxDrop: number) {
+        return this.game.dumpShares(maxDrop);
+    }
+    activeEffects() {
+        return this.game.powers.activeEffects();
+    }
 }
 
 /**
@@ -91,6 +107,10 @@ export class PowerManager {
         return this.schedule;
     }
 
+    activeEffects(): ActiveEffect[] {
+        return this.active.map((a) => ({ powerId: a.definition.id, player: a.player, state: a.state, secondsLeft: a.secondsLeft }));
+    }
+
     /** Called once per game second. */
     onSecond(elapsedSeconds: number): void {
         while (this.schedule.length && this.schedule[0]! <= elapsedSeconds) {
@@ -103,8 +123,10 @@ export class PowerManager {
         for (const activation of this.active) {
             this.run(activation, "onTick");
             activation.secondsLeft--;
-            if (activation.secondsLeft <= 0) this.run(activation, "onExpire");
-            else stillActive.push(activation);
+            if (activation.secondsLeft <= 0) {
+                this.run(activation, "onExpire");
+                this.cleanUp(activation);
+            } else stillActive.push(activation);
         }
         this.active = stillActive;
     }
@@ -164,6 +186,7 @@ export class PowerManager {
         );
         this.run(activation, "onActivate");
         if (activation.secondsLeft > 0) this.active.push(activation);
+        else this.cleanUp(activation);
     }
 
     inventoryIds(player: Player): string[] {
@@ -186,6 +209,7 @@ export class PowerManager {
     }
 
     dispose(): void {
+        for (const activation of this.active) this.cleanUp(activation);
         this.active = [];
         this.offers.clear();
         this.inventories.clear();
@@ -197,6 +221,10 @@ export class PowerManager {
 
     private sendInventory(player: Player): void {
         player.send({ type: MessageType.POWER_INVENTORY, inventory: this.inventoryIds(player) });
+    }
+
+    private cleanUp(activation: Activation): void {
+        for (const undo of activation.cleanups.splice(0)) undo();
     }
 
     private run(activation: Activation, hook: "onActivate" | "onTick" | "onExpire"): void {

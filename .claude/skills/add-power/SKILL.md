@@ -32,7 +32,7 @@ export default definePower({
 });
 ```
 
-Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip 15, siphon 15, dark-pool 15, golden-parachute 15, embargoed-press-release 15, storm 5.
+Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip 15, siphon 15, dark-pool 15, golden-parachute 15, embargoed-press-release 15, wiretap 15, burner-phone 15, special-dividend 15, copycat 10, fat-finger 10, storm 5.
 
 ## 2. What `ctx` gives you (src/powers/types.ts)
 
@@ -46,9 +46,14 @@ Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip
 | `ctx.market` | exchange: `.price` (mark, $), `.book.bestBid()/bestAsk()` (ticks), `.limit/market/cancelAll(account, ...)` |
 | `ctx.giveCash(player, dollars)` | credit/debit available cash; the portfolio update is sent automatically |
 | `player.lockTrading()` | disables trading; returns a release fn; stacks correctly with other locks |
+| `player.concealTrades()` | hides the player from `onPlayerTrade` listeners (Wiretap, Copycat); returns a release fn; stacks |
 | `player.hideMarketImpact()` | the player's taker trades stop moving the guide price; returns a release fn; stacks |
 | `ctx.notify(player \| players, {level, title, description})`, `ctx.notifyAll(...)` | toasts (`success` for the initiator, `warning` for victims, by convention) |
 | `ctx.publishNews(defineNews-shaped object)` | headline for everyone, with optional `fairValueShock` and `onStart({ model, market, rng })` effect |
+| `ctx.onPlayerTrade(fn)` | human players' fills, aggregated per player/side, delivered at the next flush (safe to trade inside); `trade.automatic` marks trades a power made in reaction (skip those to avoid loops); players with `concealTrades()` are left out; unsubscribed when the effect ends |
+| `ctx.marketOrder(player, side, qty)` | market order on a player's behalf, recorded in their order history |
+| `ctx.dumpShares(maxDrop)` | a rogue non-human trader sweeps the bids down to `maxDrop` below the mark |
+| `ctx.activeEffects()` | running power effects (`powerId`, `player`, `state`), e.g. to find who is spying on someone |
 | `ctx.upcomingNews(withinSeconds)` | peek at the next catalog headline (`{ news, inSeconds }`) and bring it forward to within that many seconds |
 | `ctx.rng` | seeded randomness. **Never `Math.random()`.** |
 | `ctx.game` | escape hatch (settings, bots, clock, ...) |

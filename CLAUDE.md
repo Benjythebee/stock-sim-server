@@ -80,6 +80,7 @@ scripts/                load.ts, simulate.ts
 - Invariants (tested by randomized property tests): total cash and shares are conserved, no available/reserved balance is ever negative, and reserved amounts equal what's resting on the book.
 - **Mark price** = last trade clamped inside the best bid/ask. It is "the price" everywhere (UI, P&L, bots), so it follows the quotes even when nobody trades.
 - Human takers move the guide price (`Game.onTrade` → `model.absorbTrade`), weighted by trade size. That's the players' market impact. `player.hideMarketImpact()` (Dark Pool) turns it off per account.
+- `Game.onPlayerTrade(listener)` is the trade feed for surveillance powers (Wiretap, Copycat). Fills are queued in `onTrade` and dispatched at the start of `flush()`, after matching, so listeners can place orders; trades made during dispatch are marked `automatic` and go out in a later round (capped at 4). `player.concealTrades()` (Burner Phone) keeps a player out of the feed.
 - The **house market maker** (`bots/house.ts`, `settings.houseLiquidity`, default on) quotes a 5-level ladder around the guide every step, so the market is always two-sided and tracks the model. It isn't selectable and isn't listed in results.
 
 ### Rooms (game/room.ts)
