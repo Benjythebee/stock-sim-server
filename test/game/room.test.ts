@@ -36,7 +36,7 @@ describe("Room: joining", () => {
         ]);
         expect(socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "alice", connected: true, host: true }], you: 0 });
         expect(socket.last(MessageType.ORDER_UPDATE)).toMatchObject({ orders: [], reset: true });
-        expect(socket.last(MessageType.ID)!.id).toBe(`r1-${player.id}`);
+        expect(socket.last(MessageType.ID)!.id).toBe(`r1-${player.resumeToken}`);
         expect(socket.last(MessageType.ROOM_STATE)).toMatchObject({ paused: true, started: false, ended: false, clients: 1, roomId: "r1" });
         expect(socket.last(MessageType.PORTFOLIO_UPDATE)!.value.cash).toBe(10_000);
     });
@@ -55,7 +55,7 @@ describe("Room: joining", () => {
         const { join } = lobby();
         const a = join("alice");
         const b = join("bob");
-        expect(a.socket.last(MessageType.JOIN)).toMatchObject({ username: "bob", id: b.player.id });
+        expect(a.socket.last(MessageType.JOIN)).toEqual({ type: MessageType.JOIN, roomId: "r1", username: "bob" });
         expect(b.socket.of(MessageType.JOIN)).toHaveLength(0);
         expect(b.socket.of(MessageType.IS_ADMIN)).toHaveLength(0);
     });
@@ -67,7 +67,7 @@ describe("Room: joining", () => {
         room.disconnect(a.socket);
         expect(a.player.connected).toBe(false);
         b.socket.clear();
-        const again = join("alice", a.player.id);
+        const again = join("alice", a.player.resumeToken);
         expect(again.player).toBe(a.player);
         expect(b.socket.of(MessageType.JOIN)).toHaveLength(0);
         expect(again.socket.of(MessageType.IS_ADMIN)).toHaveLength(1);
@@ -112,12 +112,38 @@ describe("Room: joining", () => {
     test("resuming from a second tab detaches (without closing) the old socket, whose close is then ignored", () => {
         const { room, join } = lobby();
         const a = join("alice");
-        const tab2 = join("alice", a.player.id);
+        const tab2 = join("alice", a.player.resumeToken);
         expect(a.socket.closed).toBeNull();
         expect(a.socket.topics.has("r1")).toBe(false);
         room.disconnect(a.socket);
         expect(tab2.player.connected).toBe(true);
         expect(tab2.player.connection).toBe(tab2.socket);
+    });
+
+    test("a player id seen by others never resumes a seat; only the private resume token does", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        const b = join("bob");
+        // Nothing bob receives (JOIN, PLAYERS, ...) carries alice's id or token.
+        const bobSaw = JSON.stringify(b.socket.received);
+        expect(bobSaw).not.toContain(a.player.id);
+        expect(bobSaw).not.toContain(a.player.resumeToken);
+        expect(a.player.resumeToken).not.toBe(a.player.id);
+
+        // Even if bob learned alice's (internal) id, presenting it gets a fresh seat, not hers.
+        const thief = join("mallory", a.player.id);
+        expect(thief.player).not.toBe(a.player);
+        expect(a.player.connection).toBe(a.socket);
+        expect(thief.socket.of(MessageType.IS_ADMIN)).toHaveLength(0);
+        expect(room.adminId).toBe(a.player.id);
+        expect(room.players.size).toBe(3);
+
+        // The real token, from alice's own ID message, still resumes her seat.
+        const token = a.socket.last(MessageType.ID)!.id.slice("r1-".length);
+        const again = join("alice", token);
+        expect(again.player).toBe(a.player);
+        expect(again.socket.of(MessageType.IS_ADMIN)).toHaveLength(1);
+        expect(room.players.size).toBe(3);
     });
 
     test("an unknown session id just creates a new player", () => {
@@ -136,7 +162,7 @@ describe("Room: joining", () => {
         expect(room.players.has(a.player.id)).toBe(false);
         expect(room.adminId).toBe(b.player.id);
         expect(b.socket.of(MessageType.IS_ADMIN)).toHaveLength(1);
-        expect(b.socket.last(MessageType.LEAVE)!.id).toBe(a.player.id);
+        expect(b.socket.last(MessageType.LEAVE)).toEqual({ type: MessageType.LEAVE, roomId: "r1" });
         room.disconnect(b.socket);
         await Bun.sleep(testConfig.reconnectGraceMs + 30);
         expect(host.emptied).toEqual(["r1"]);
@@ -232,7 +258,7 @@ describe("Room: lifecycle", () => {
 
         // bob refreshes: the resumed seat gets ROOM_STATE ended=true *and* the conclusion, after its portfolio.
         room.disconnect(b.socket);
-        const again = join("bob", b.player.id);
+        const again = join("bob", b.player.resumeToken);
         const types = again.socket.received.map((m) => m.type);
         expect(again.socket.last(MessageType.ROOM_STATE)!.ended).toBe(true);
         expect(again.socket.of(MessageType.GAME_CONCLUSION)).toEqual([final]);
@@ -301,7 +327,7 @@ describe("Room: lifecycle", () => {
         expect(room.game.powers.inventoryIds(a.player)).toEqual([]);
 
         room.disconnect(a.socket);
-        const again = join("alice", a.player.id);
+        const again = join("alice", a.player.resumeToken);
         expect(again.socket.of(MessageType.POWER_OFFERS)).toHaveLength(0);
     });
 
@@ -394,7 +420,7 @@ describe("Room: trading", () => {
         expect(a.socket.last(MessageType.ORDER_UPDATE)!.orders).toEqual([expect.objectContaining({ id: open[0]!.id, status: "cancelled" })]);
         expect(a.socket.last(MessageType.PORTFOLIO_UPDATE)!.value.reservedCash).toBe(4);
 
-        const again = join("alice", a.player.id).socket.last(MessageType.ORDER_UPDATE)!;
+        const again = join("alice", a.player.resumeToken).socket.last(MessageType.ORDER_UPDATE)!;
         expect(again.reset).toBe(true);
         expect(again.orders.map((o) => o.status)).toEqual(["open", "cancelled"]);
     });

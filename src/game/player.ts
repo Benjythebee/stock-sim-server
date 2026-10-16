@@ -42,6 +42,11 @@ export class Player {
     account: Account;
     orders = new OrderJournal();
     rateLimitedNotified = 0;
+    /**
+     * The seat's resume secret, sent only to this player (ID message) and returned as `prevSessionData`.
+     * Separate from `id`, which is internal and must never be what resumes a seat.
+     */
+    readonly resumeToken = crypto.randomUUID();
     /** Active "hide my trades" effects (Burner Phone). Counted so overlapping effects stack. */
     private concealment = 0;
 

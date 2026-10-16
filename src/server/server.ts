@@ -26,7 +26,7 @@ export interface GameServer {
  *   GET /api/bots.json        selectable bot strategies (admin UI)
  *   GET /api/version.json     server version, deployed commit and mod API version (UI footer)
  *   GET /assets/powers/...    files shipped by power mods (icons)
- *   GET /ws/:roomId           WebSocket upgrade. Query: username, spectator, prevSessionData=<roomId>-<playerId>
+ *   GET /ws/:roomId           WebSocket upgrade. Query: username, spectator, prevSessionData=<roomId>-<resumeToken>
  */
 export function createServer(config: ServerConfig, catalog: Catalog): GameServer {
     let rooms: RoomManager;
@@ -70,7 +70,7 @@ export function createServer(config: ServerConfig, catalog: Catalog): GameServer
                 if (!ROOM_ID_PATTERN.test(roomId)) return new Response("Invalid room id", { status: 400 });
                 const url = new URL(req.url);
                 const spectator = url.searchParams.has("spectator");
-                // prevSessionData is the ID message we sent earlier: "<roomId>-<playerId>".
+                // prevSessionData is the ID message we sent earlier: "<roomId>-<resumeToken>" (a secret, not the player id).
                 const prev = url.searchParams.get("prevSessionData");
                 const resume = prev?.startsWith(`${roomId}-`) ? prev.slice(roomId.length + 1) : null;
                 const data: SocketData = { roomId, username: usernameOrDefault(url.searchParams.get("username")), spectator, resume, playerId: null };

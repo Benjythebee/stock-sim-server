@@ -10,7 +10,7 @@ export interface SocketData {
     roomId: string;
     username: string;
     spectator: boolean;
-    /** Player id to resume (from the `prevSessionData` query param). */
+    /** Resume token of the seat to take back (from the `prevSessionData` query param). Not a player id. */
     resume: string | null;
     /** Set once the socket is attached to a player. */
     playerId: string | null;
@@ -83,8 +83,7 @@ export class Room {
 
     /** Attach a player socket: resumes the seat in `socket.data.resume` if it exists. */
     join(socket: RoomSocket): Player {
-        const resumeId = socket.data.resume;
-        let player = resumeId ? this.players.get(resumeId) : undefined;
+        let player = this.findSeat(socket.data.resume);
 
         if (player) {
             const previous = player.connection as RoomSocket | null;
@@ -104,7 +103,7 @@ export class Room {
             this.players.set(player.id, player);
             this.game.addPlayer(player);
             // Others hear about the newcomer; the newcomer isn't subscribed yet, so doesn't.
-            this.broadcast({ type: MessageType.JOIN, roomId: this.id, id: player.id, username: player.name });
+            this.broadcast({ type: MessageType.JOIN, roomId: this.id, username: player.name });
         }
 
         player.connection = socket;
@@ -114,6 +113,13 @@ export class Room {
         this.sendWelcome(player);
         this.sendPlayers();
         return player;
+    }
+
+    /** The seat a resume token belongs to. Only the token resumes: a player id never does. */
+    private findSeat(token: string | null): Player | undefined {
+        if (!token) return undefined;
+        for (const player of this.players.values()) if (player.resumeToken === token) return player;
+        return undefined;
     }
 
     spectate(socket: RoomSocket): void {
@@ -146,7 +152,7 @@ export class Room {
         player.removalTimer = null;
         if (!this.players.delete(player.id)) return;
         this.game.removePlayer(player);
-        this.broadcast({ type: MessageType.LEAVE, roomId: this.id, id: player.id });
+        this.broadcast({ type: MessageType.LEAVE, roomId: this.id });
 
         if (this.adminId === player.id) {
             const next = [...this.players.values()].find((p) => p.connected) ?? this.players.values().next().value;
@@ -346,7 +352,7 @@ export class Room {
 
     /** Everything a (re)joining player needs, in the order the UI expects. */
     private sendWelcome(player: Player): void {
-        player.send({ type: MessageType.ID, id: `${this.id}-${player.id}` });
+        player.send({ type: MessageType.ID, id: `${this.id}-${player.resumeToken}` });
         player.send(this.contentManifest());
         if (player.id === this.adminId) player.send({ type: MessageType.IS_ADMIN });
         player.send(this.roomState());

@@ -125,10 +125,12 @@ export type ClientMessage =
 
 // ---- server -> client --------------------------------------------------------------------
 
+/** `id` is `<roomId>-<resumeToken>`: the seat's secret, sent back as `prevSessionData` to resume it. */
 export type IdMessage = { type: MessageType.ID; id: string };
-export type JoinMessage = { type: MessageType.JOIN; roomId: string; id: string; username: string };
-export type LeaveMessage = { type: MessageType.LEAVE; roomId: string; id: string };
-/** One human in the room. No id on purpose: a player id is the seat's resume secret. */
+/** Broadcasts carry no player id: nothing on the client needs one. */
+export type JoinMessage = { type: MessageType.JOIN; roomId: string; username: string };
+export type LeaveMessage = { type: MessageType.LEAVE; roomId: string };
+/** One human in the room. No id on purpose (see JoinMessage). */
 export interface PlayerInfo {
     name: string;
     /** False while their seat is held for a reconnect. */
