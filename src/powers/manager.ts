@@ -60,6 +60,9 @@ class Activation implements PowerContext<any> {
     publishNews(news: NewsDefinition) {
         this.game.news.publish(news);
     }
+    upcomingNews(withinSeconds: number) {
+        return this.game.news.upcoming(withinSeconds);
+    }
 }
 
 /**

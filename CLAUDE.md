@@ -76,7 +76,7 @@ scripts/                load.ts, simulate.ts
 - Placing an order **reserves** what it could cost: cash at the limit price for buys, shares for sells. Fills settle both accounts (the maker's price wins, and the taker's surplus reservation is released). Cancels release. Market buys are budget-capped to available cash. Market orders are IOC.
 - Invariants (tested by randomized property tests): total cash and shares are conserved, no available/reserved balance is ever negative, and reserved amounts equal what's resting on the book.
 - **Mark price** = last trade clamped inside the best bid/ask. It is "the price" everywhere (UI, P&L, bots), so it follows the quotes even when nobody trades.
-- Human takers move the guide price (`Game.onTrade` → `model.absorbTrade`), weighted by trade size. That's the players' market impact.
+- Human takers move the guide price (`Game.onTrade` → `model.absorbTrade`), weighted by trade size. That's the players' market impact. `player.hideMarketImpact()` (Dark Pool) turns it off per account.
 - The **house market maker** (`bots/house.ts`, `settings.houseLiquidity`, default on) quotes a 5-level ladder around the guide every step, so the market is always two-sided and tracks the model. It isn't selectable and isn't listed in results.
 
 ### Rooms (game/room.ts)
@@ -105,7 +105,7 @@ scripts/                load.ts, simulate.ts
 - **Shape**: a mod is a single file or a folder with `index.ts`. Folders can ship assets: `icon: "robber-hand.svg"` resolves inside the mod folder and is served at `/assets/powers/<id>/...`; a missing or out-of-folder file degrades to the "missing" icon with a warning (it doesn't fail startup). Mods import from `"@mod"` only. Example: `mods/powers/siphon/`.
 - **Powers**: default-export `definePower({...})`. Use the `/add-power` skill.
 - **Bots**: default-export `defineBot({...})`. Use the `/add-bot` skill. Check behaviour with `bun run simulate -- --only YourBot`.
-- **News**: add a `defineNews({...})` to `src/news/catalog.ts`.
+- **News**: add a `defineNews({...})` to `src/news/catalog.ts`. Declare fair-value moves as `fairValueShock` (data, so powers like Embargoed Press Release can read them), not inside `onStart`.
 - Hooks from mods run inside try/catch: a throwing power is logged and skipped, and a bot that throws 3 times is benched for the game.
 
 ## Conventions

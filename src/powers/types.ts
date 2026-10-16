@@ -3,7 +3,7 @@ import type { PriceModel } from "../engine/price-model";
 import type { Rng } from "../engine/rng";
 import type { Game } from "../game/game";
 import type { Player } from "../game/player";
-import type { NewsDefinition } from "../news/types";
+import type { NewsDefinition, UpcomingNews } from "../news/types";
 import type { Notification } from "../protocol/messages";
 import type { DynamicText } from "../text";
 
@@ -77,6 +77,11 @@ export interface PowerContext<S> {
     giveCash(player: Player, dollars: number): number;
     /** Push a headline to everyone, optionally with market effects. */
     publishNews(news: NewsDefinition): void;
+    /**
+     * Peek at the next random headline and bring it forward so it's published within
+     * `withinSeconds`. Null if there are no headlines to draw from.
+     */
+    upcomingNews(withinSeconds: number): UpcomingNews | null;
 }
 
 export interface IconCredit {

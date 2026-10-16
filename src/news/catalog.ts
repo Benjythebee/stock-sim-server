@@ -6,7 +6,7 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         title: "Tech Giant Releases New Product",
         description: "The latest gadget has hit the market, promising to revolutionize the tech industry.",
         durationSeconds: 20,
-        onStart: ({ model }) => model.shockIntrinsic(0.1),
+        fairValueShock: 0.1,
     }),
     defineNews({
         title: "Economic Growth Surges",
@@ -22,7 +22,7 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         title: "Federal Reserve Announces Interest Rate Decision",
         description: "The central bank's latest monetary policy announcement sends ripples through financial markets.",
         durationSeconds: 25,
-        onStart: ({ model }) => model.shockIntrinsic(-0.05),
+        fairValueShock: -0.05,
     }),
     defineNews({
         title: "Merger & Acquisition Activity Heats Up",
@@ -38,7 +38,7 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         title: "Regulatory Changes Impact Industry",
         description: "New government regulations are set to reshape business operations in key sectors.",
         durationSeconds: 35,
-        onStart: ({ model }) => model.shockIntrinsic(-0.1),
+        fairValueShock: -0.1,
     }),
     defineNews({
         title: "Oil Prices Fluctuate on Supply Concerns",
@@ -54,7 +54,7 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         title: "Cryptocurrency Market Volatility",
         description: "Digital assets experience significant price movements amid regulatory uncertainty.",
         durationSeconds: 12,
-        onStart: ({ model }) => model.shockIntrinsic(0.5),
+        fairValueShock: 0.5,
     }),
     defineNews({
         title: "Infrastructure Investment Plan Announced",

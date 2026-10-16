@@ -84,6 +84,21 @@ export class Player {
         };
     }
 
+    /**
+     * Stop this player's trades from moving the guide price until the returned function is
+     * called. Stacks like lockTrading. Releasing twice is a no-op.
+     */
+    hideMarketImpact(): () => void {
+        const account = this.account;
+        account.impactShields++;
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            account.impactShields--;
+        };
+    }
+
     sendTradingState(): void {
         this.send({ type: MessageType.CLIENT_STATE, tradingDisabled: this.account.tradingDisabled });
     }

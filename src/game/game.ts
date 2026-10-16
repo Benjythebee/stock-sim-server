@@ -276,8 +276,8 @@ export class Game {
 
     private readonly onTrade = (fill: Fill, taker: Account, maker: Account) => {
         if (maker.isHuman) this.playerMap.get(maker.id)?.orders.filled(fill.makerOrderId, fill.price, fill.qty, fill.makerDone, this.stepClock);
-        // Human takers move the guide price: bigger trades, more impact.
-        if (!taker.isHuman) return;
+        // Human takers move the guide price: bigger trades, more impact (unless they're in a dark pool).
+        if (!taker.isHuman || taker.impactShields > 0) return;
         const notional = toDollars(fill.price * fill.qty);
         const weight = Math.min(1, Math.max(0.05, notional / (Math.max(1000, this.settings.startingCash) * 0.05)));
         this.model.absorbTrade(toDollars(fill.price), weight);

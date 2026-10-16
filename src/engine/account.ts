@@ -19,6 +19,9 @@ export class Account {
     /** Active "trading disabled" effects. Counted so overlapping effects stack correctly. */
     tradingLocks = 0;
 
+    /** Active "no market impact" effects (Dark Pool). While > 0, this account's taker trades don't move the guide price. */
+    impactShields = 0;
+
     /** Set on any change; the game loop sends portfolio updates for dirty accounts and clears it. */
     dirty = true;
 

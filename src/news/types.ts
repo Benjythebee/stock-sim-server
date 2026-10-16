@@ -19,10 +19,22 @@ export interface NewsDefinition {
     description: NewsText;
     /** How long the headline stays "live" in the UI, in game seconds. */
     durationSeconds?: number;
+    /**
+     * Permanent move of the hidden fair value when published (0.1 = +10%), applied before onStart.
+     * Declared as data (rather than inside onStart) so powers can tell what a headline will do.
+     */
+    fairValueShock?: number;
     onStart?(ctx: NewsContext): void;
     /** Every game second while live. */
     onTick?(ctx: NewsContext): void;
     onEnd?(ctx: NewsContext): void;
+}
+
+/** A headline that's coming soon, as revealed by NewsManager.upcoming(). */
+export interface UpcomingNews {
+    news: NewsDefinition;
+    /** Game seconds until it's published. */
+    inSeconds: number;
 }
 
 export function defineNews(news: NewsDefinition): NewsDefinition {
