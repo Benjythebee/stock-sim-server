@@ -35,3 +35,6 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Claude Code (personal overrides)
 .claude/settings.local.json
+
+# Written by deploy/deploy.sh into each release
+REVISION

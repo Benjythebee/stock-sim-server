@@ -23,6 +23,7 @@ export default definePower({
     type: "market",                 // "client" | "others" | "all" | "market" (UI styling only)
     instant: false,                 // true = fires on pick; false = goes to inventory, used later
     weight: 10,                     // briefcase odds; HIGHER = MORE COMMON; 0 = never offered
+    apiVersion: 1,                  // mod API version this power needs (src/version.ts MOD_API_VERSION); 2 for ctx.present()
     durationSeconds: 15,            // 0/omitted = one-shot (then onTick/onExpire are not allowed)
     state: () => ({ release: null as null | (() => void) }), // fresh per activation
 
@@ -32,7 +33,7 @@ export default definePower({
 });
 ```
 
-Current weights, for balancing: homeless 40, rumor 25, ddos 20, insider-tip 15, siphon 15, dark-pool 15, golden-parachute 15, embargoed-press-release 15, wiretap 15, burner-phone 15, special-dividend 15, heritage 10, copycat 10, fat-finger 10, hot-potato 10, bullet-bill 10, pump-and-dump 10, influencer 10, loan-shark 10, storm 5. With 3 offers per briefcase, weight 10 shows up in about 1 briefcase in 10.
+Current weights, for balancing: homeless 40, rumor 25, ddos 20, insider-tip 15, siphon 15, dark-pool 15, golden-parachute 15, embargoed-press-release 15, wiretap 15, burner-phone 15, special-dividend 15, spin-the-wheel 15, heritage 10, copycat 10, fat-finger 10, hot-potato 10, bullet-bill 10, pump-and-dump 10, influencer 10, loan-shark 10, storm 5. With 3 offers per briefcase, weight 10 shows up in about 1 briefcase in 10.
 
 ## 2. What `ctx` gives you (src/powers/types.ts)
 
@@ -55,6 +56,7 @@ Current weights, for balancing: homeless 40, rumor 25, ddos 20, insider-tip 15, 
 | `ctx.dumpShares(maxDrop)` | a rogue non-human trader sweeps the bids down to `maxDrop` below the mark |
 | `ctx.activeEffects()` | running power effects (`powerId`, `player`, `state`), e.g. to find who is spying on someone |
 | `ctx.upcomingNews(withinSeconds)` | peek at the next catalog headline (`{ news, inSeconds }`) and bring it forward to within that many seconds |
+| `ctx.present(player \| players, presentation)` | play an animation on their screens, e.g. a prize wheel: `{ kind: "wheel", segments: [{label, color?, weight?}], result, durationMs? }`. Decide the outcome first and report it with a notification once the animation is over (pay out in `onExpire`, see `mods/powers/spin-the-wheel/`): UIs that don't know the kind ignore it. Needs `apiVersion: 2` |
 | `ctx.rng` | seeded randomness. **Never `Math.random()`.** |
 | `ctx.game` | escape hatch (settings, bots, clock, ...) |
 

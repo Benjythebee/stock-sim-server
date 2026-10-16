@@ -7,6 +7,7 @@ import type { Game, PlayerTrade } from "../game/game";
 import type { Player } from "../game/player";
 import type { NewsDefinition, UpcomingNews } from "../news/types";
 import type { Notification } from "../protocol/messages";
+import type { Presentation } from "./presentation";
 import type { DynamicText } from "../text";
 
 /**
@@ -40,6 +41,11 @@ export interface PowerDefinition<S extends object = Record<string, never>> {
     durationSeconds?: number;
     /** Relative odds of appearing in a briefcase. Higher = more common. 0 = never offered. */
     weight: number;
+    /**
+     * The mod API version this power needs (see MOD_API_VERSION in src/version.ts). Defaults to 1.
+     * A server with an older API refuses to load it, with a clear error, instead of failing mid-game.
+     */
+    apiVersion?: number;
     /** Reserved for a future shop. */
     price?: number;
     /** Fresh per-activation state. Called once each time the power is activated. */
@@ -75,6 +81,12 @@ export interface PowerContext<S> {
 
     notify(to: Player | Player[], notification: Notification): void;
     notifyAll(notification: Notification): void;
+    /**
+     * Play an animation (e.g. a prize wheel) on these players' screens. Decide the outcome first and
+     * report it with a notification once the animation is over: UIs that predate the kind skip it.
+     * Throws on an invalid presentation. Needs `apiVersion: 2`.
+     */
+    present(to: Player | Player[], presentation: Presentation): void;
     /** Credit (or, negative, debit) a player's available cash, in dollars. Returns the amount applied. */
     giveCash(player: Player, dollars: number): number;
     /** Push a headline to everyone, optionally with market effects. */

@@ -18,6 +18,7 @@ git archive --format=tar HEAD | ssh "$HOST" "
     set -euo pipefail
     dir=/opt/tendiesbrawl/releases/$RELEASE
     mkdir -p \$dir && tar -x -C \$dir
+    echo $SHA > \$dir/REVISION
     ln -sfn \$dir /opt/tendiesbrawl/current
     systemctl restart tendiesbrawl
     sleep 2

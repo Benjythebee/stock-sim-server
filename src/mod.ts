@@ -8,6 +8,8 @@
 export { definePower } from "./powers/types";
 export type { ActiveEffect, PowerContext, PowerDefinition, PowerTarget, IconCredit, PublicPower } from "./powers/types";
 export type { PlayerTrade } from "./game/game";
+export type { Presentation, WheelPresentation, WheelSegment } from "./powers/presentation";
+export { MOD_API_VERSION } from "./version";
 
 export { defineBot, sharesWorth, referenceCash } from "./bots/types";
 export type { BotDefinition, BotStrategy, BotView } from "./bots/types";

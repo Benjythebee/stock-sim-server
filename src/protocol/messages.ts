@@ -5,6 +5,7 @@
  * existing type. Ranges: 0-29 core, 30-59 admin, 60-79 lifecycle, 80-89 powers, 99 debug.
  */
 import type { PublicGameSettings } from "../game/settings";
+import type { Presentation } from "../powers/presentation";
 import type { PublicPower } from "../powers/types";
 
 export enum MessageType {
@@ -40,6 +41,7 @@ export enum MessageType {
     POWER_SELECT = 81,
     POWER_CONSUME = 82,
     POWER_INVENTORY = 83,
+    POWER_PRESENT = 84,
 
     DEBUG_PRICES = 99,
 }
@@ -172,6 +174,12 @@ export type ConclusionMessage = {
 };
 export type PowerOffersMessage = { type: MessageType.POWER_OFFERS; offers: PublicPower[] };
 export type PowerInventoryMessage = { type: MessageType.POWER_INVENTORY; inventory: string[] };
+/**
+ * Private. Play an animation for a power (a prize wheel, ...). The outcome is already decided; the
+ * power reports it with a normal NOTIFICATION once the animation is over. UIs that don't know the
+ * `presentation.kind` ignore it.
+ */
+export type PowerPresentMessage = { type: MessageType.POWER_PRESENT; powerId: string; title: string; presentation: Presentation };
 /** Only sent when settings.revealPrices is on. */
 /**
  * Sent right after connecting: every installed power (built-ins + mods) and the server-hosted
@@ -201,6 +209,7 @@ export type ServerMessage =
     | PowerOffersMessage
     | PowerInventoryMessage
     | ContentManifestMessage
+    | PowerPresentMessage
     | DebugPricesMessage;
 
 export type Notification = Omit<NotificationMessage, "type">;

@@ -51,6 +51,26 @@ export default definePower({
   (the `CONTENT_MANIFEST` message), so nothing needs to change in the UI to add a power.
 - Full reference: `.claude/skills/add-power/SKILL.md` and `.claude/skills/add-bot/SKILL.md`.
 
+## Animations
+
+A power can ask players' screens to play an animation the UI has built in. Mods never send
+front-end code: they pick a `kind` and fill in its data, and the server decides the outcome.
+
+```ts
+ctx.present(ctx.player, { kind: "wheel", segments: [{ label: "Bust" }, { label: "+$500", color: "#16a34a" }], result: 1 });
+```
+
+Only `"wheel"` exists so far (see `spin-the-wheel/`). Report the outcome with a normal notification
+once the animation is over (pay out in `onExpire`): apps that don't know a kind skip the animation,
+but the toast still reaches them.
+
+## Versions
+
+`MOD_API_VERSION` (exported by `@mod`, defined in `src/version.ts`) counts what mods can use. Set
+`apiVersion` on a power to the version it needs (2 for `ctx.present()`; default 1). A server with an
+older API refuses to start with that mod and says why, rather than failing mid-game. The app's
+footer shows the server's version, the app's, and the mods API version the app supports.
+
 Mods outside this repo can be loaded with `POWER_MODS_DIR` / `BOT_MODS_DIR`. The `@mod` alias only
 resolves inside this repo, so external mods should import by relative path (or export a plain
 object).

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { log } from "../../src/log";
 import { loadPowerRegistry, MISSING_ICON, powerProblems, PowerRegistry, toPublicPower } from "../../src/powers/registry";
 import { definePower } from "../../src/powers/types";
+import { MOD_API_VERSION } from "../../src/version";
 import { builtinCatalog } from "../helpers";
 
 const valid = definePower({ id: "test-power", title: "T", description: "D", weight: 1, onActivate() {} });
@@ -25,6 +26,15 @@ describe("power registry", () => {
         expect(powerProblems({ ...valid, onActivate: undefined })).toContain("a power needs at least one hook");
         expect(powerProblems({ ...valid, type: "everyone" as never })).toHaveLength(1);
         expect(() => new PowerRegistry([valid, valid])).toThrow(/duplicate/);
+    });
+
+    test("a power that needs a newer mod API is refused with a clear error", () => {
+        expect(powerProblems({ ...valid, apiVersion: MOD_API_VERSION })).toEqual([]);
+        expect(powerProblems({ ...valid, apiVersion: 0 })).toContain("apiVersion must be an integer >= 1");
+        expect(powerProblems({ ...valid, apiVersion: MOD_API_VERSION + 1 })).toEqual([
+            `needs mod API v${MOD_API_VERSION + 1}, but this server only has v${MOD_API_VERSION}: update the server`,
+        ]);
+        expect(() => new PowerRegistry([{ ...valid, apiVersion: 99 }])).toThrow(/needs mod API v99/);
     });
 
     test("public format matches what the UI expects", () => {

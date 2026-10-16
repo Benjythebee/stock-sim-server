@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { log } from "../../src/log";
 import { briefcaseSchedule } from "../../src/powers/manager";
+import { presentationProblems, type WheelSegment } from "../../src/powers/presentation";
 import { definePower } from "../../src/powers/types";
 import { MessageType } from "../../src/protocol/messages";
 import { catalogWith, makeGame, makePlayer, noBots, runSeconds } from "../helpers";
@@ -85,6 +86,62 @@ describe("PowerManager", () => {
         game.powers.activate(def, player);
         runSeconds(game, 4);
         expect(log.filter((l) => l.startsWith("expire"))).toEqual(["expire:3", "expire:3"]);
+    });
+
+    test("present() sends a validated, trimmed animation to the chosen players only", () => {
+        const spinner = definePower({
+            id: "spinner",
+            title: "Spinner",
+            description: "spins",
+            weight: 1,
+            apiVersion: 2,
+            onActivate(ctx) {
+                const segments = [{ label: "A", color: "#f00", extra: "dropped" }, { label: "B", weight: 3 }] as WheelSegment[];
+                ctx.present(ctx.player, { kind: "wheel", segments, result: 1 });
+            },
+        });
+        const { game } = makeGame({}, catalogWith({ bots: noBots, powers: [spinner] }));
+        const alice = makePlayer("alice");
+        const bob = makePlayer("bob");
+        game.addPlayer(alice.player);
+        game.addPlayer(bob.player);
+        game.powers.activate(spinner, alice.player);
+        expect(alice.socket.last(MessageType.POWER_PRESENT)).toEqual({
+            type: MessageType.POWER_PRESENT,
+            powerId: "spinner",
+            title: "Spinner",
+            presentation: { kind: "wheel", segments: [{ label: "A", color: "#f00" }, { label: "B", weight: 3 }], result: 1, durationMs: 4000 },
+        });
+        expect(bob.socket.of(MessageType.POWER_PRESENT)).toEqual([]);
+    });
+
+    test("present() refuses an invalid presentation (and the throw is contained)", () => {
+        expect(presentationProblems({ kind: "wheel", segments: [{ label: "only one" }], result: 0 })).toEqual(["a wheel needs 2-24 segments"]);
+        expect(presentationProblems({ kind: "wheel", segments: [{ label: "A" }, { label: "B" }], result: 2 })).toEqual(["result must be the index of a segment"]);
+        expect(presentationProblems({ kind: "wheel", segments: [{ label: "" }, { label: "B", weight: 0 }], result: 0, durationMs: 60_000 })).toEqual([
+            "durationMs must be between 1000 and 10000",
+            "segment 0 needs a label",
+            "segment 1 weight must be > 0",
+        ]);
+        expect(presentationProblems({ kind: "confetti" } as never)).toEqual(["kind must be one of wheel"]);
+
+        const broken = definePower({
+            id: "broken",
+            title: "Broken",
+            description: "bad wheel",
+            weight: 1,
+            onActivate: (ctx) => ctx.present(ctx.player, { kind: "wheel", segments: [], result: 0 }),
+        });
+        const { game } = makeGame({}, catalogWith({ bots: noBots, powers: [broken] }));
+        const { player, socket } = makePlayer();
+        game.addPlayer(player);
+        log.setLevel("silent");
+        try {
+            expect(() => game.powers.activate(broken, player)).not.toThrow();
+        } finally {
+            log.setLevel("warn");
+        }
+        expect(socket.of(MessageType.POWER_PRESENT)).toEqual([]);
     });
 
     test("a throwing hook is contained", () => {

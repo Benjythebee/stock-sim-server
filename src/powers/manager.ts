@@ -8,6 +8,7 @@ import { MessageType, type Notification } from "../protocol/messages";
 import type { PowerRegistry } from "./registry";
 import type { Side } from "../engine/order-book";
 import type { PlayerTrade } from "../game/game";
+import { presentationProblems, wirePresentation, type Presentation } from "./presentation";
 import type { ActiveEffect, AnyPowerDefinition, PowerContext, PublicPower } from "./types";
 
 /** Offers per briefcase. */
@@ -60,6 +61,12 @@ class Activation implements PowerContext<any> {
     }
     giveCash(player: Player, dollars: number) {
         return player.account.adjustCash(toTicks(dollars)) / 100;
+    }
+    present(to: Player | Player[], presentation: Presentation) {
+        const problems = presentationProblems(presentation);
+        if (problems.length) throw new Error(`invalid presentation: ${problems.join("; ")}`);
+        const message = { type: MessageType.POWER_PRESENT, powerId: this.definition.id, title: this.power.title, presentation: wirePresentation(presentation) } as const;
+        for (const p of Array.isArray(to) ? to : [to]) p.send(message);
     }
     publishNews(news: NewsDefinition) {
         this.game.news.publish(news);

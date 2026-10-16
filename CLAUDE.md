@@ -31,6 +31,7 @@ src/
   catalog.ts            loads powers + bots + news once (built-ins, then mods/); shared by every room
   mod.ts                the public mod API, imported by mods as "@mod" (tsconfig path alias)
   log.ts                leveled logger. Never log unconditionally in hot paths.
+  version.ts            SERVER_VERSION (package.json), SERVER_REVISION (deployed commit), MOD_API_VERSION (+ its changelog)
   modules.ts            loadModules(dir): discovers `<name>.ts` and `<name>/index.ts` mods (skips _*, .*, *.test.*)
   engine/               PURE: no I/O, no timers. Unit-tested to the hilt.
     money.ts            cents/ticks <-> dollars, limits
@@ -51,7 +52,7 @@ src/
     parse.ts            validates every inbound frame into a typed ClientMessage (or null)
   server/server.ts      Bun.serve: HTTP routes + WS upgrade + dispatch to rooms
   bots/                 types.ts (defineBot, BotView), bot.ts (runtime), registry.ts, house.ts, strategies/*.ts
-  powers/               types.ts (definePower, PowerContext), manager.ts, registry.ts (validation + icon assets), defs/*.ts
+  powers/               types.ts (definePower, PowerContext), manager.ts, registry.ts (validation + icon assets), defs/*.ts, presentation.ts (animations the UI plays)
 mods/                   community/custom content: powers/<id>/index.ts (+ assets) or powers/<id>.ts, bots/... (see mods/README.md)
   news/                 types.ts (defineNews), manager.ts, catalog.ts
 test/                   mirrors src/ (+ helpers.ts with FakeSocket/FakeHost/makeGame)
@@ -100,9 +101,10 @@ scripts/                load.ts, simulate.ts
 - After `ROOM_STATE` the UI assumes starting cash, so a real `PORTFOLIO_UPDATE` must always follow it. `Room.sendWelcome` and `updateSettings` do this.
 - `ORDER_UPDATE` (19, private) carries the player's orders that changed (`OrderInfo`, upsert by `id`; `status: "open"` = "Current orders", anything else = "Order history"). `reset: true` replaces the whole list; it's sent in `sendWelcome` and after a lobby rebuild. Tracking lives in `game/orders.ts` (`OrderJournal`, history capped at 100), fed by `Game.placeOrder`, `Market.onTrade` (maker fills) and `Market.onCancel` (any cancel, incl. powers). `ORDER_CANCEL` (20) takes an `OrderInfo.id` or `ORDER_CANCEL_ALL` (-1); only while running and not trading-locked.
 - `POWER_SELECT.index` is an offer index, or `POWER_SKIP_INDEX` (-1) to decline the briefcase (`PowerManager.decline`). Pending offers are re-sent on reconnect (`sendState`), so a skip must reach the server.
+- `POWER_PRESENT` (84, private) asks the UI to play an animation for a power (`ctx.present()`, see `powers/presentation.ts`; only `kind: "wheel"` so far). The server decides the outcome first; the power reports it with a normal `NOTIFICATION` once the animation is over (e.g. pay out in `onExpire`), because UIs that don't know a kind ignore the message.
 - `GAME_CONCLUSION` is frozen into `game.result` when the game ends and broadcast once. `Room.sendWelcome` (last) and `spectate` re-send it, so a refresh or a late spectator still gets the leaderboard.
 - `CONTENT_MANIFEST` (18) is sent right after `ID` on every connect: all installed powers (built-ins + mods, as PublicPower) and the server-hosted asset URLs to preload. The UI uses it as its power catalog. PublicPower has `iconUrl` (server-relative, for mod-shipped icons) which wins over `iconSlug` (built-in UI icon), plus optional `iconCredit`. The UI falls back to `/powers/missing.svg` when an icon fails to load.
-- HTTP: `/api/powers.json` (PublicPower[]), `/api/bots.json` (`{data:[{id,name,description}]}`), `/assets/powers/<id>/<file>` (only files a power references; routes built at startup), `/zhealth`.
+- HTTP: `/api/powers.json` (PublicPower[]), `/api/bots.json` (`{data:[{id,name,description}]}`), `/api/version.json` (`{version, revision, modApi}`, shown in the UI footer), `/assets/powers/<id>/<file>` (only files a power references; routes built at startup), `/zhealth`.
 
 ## Extending the game (the "mod" surface)
 
@@ -111,6 +113,8 @@ scripts/                load.ts, simulate.ts
 - **Powers**: default-export `definePower({...})`. Use the `/add-power` skill.
 - **Bots**: default-export `defineBot({...})`. Use the `/add-bot` skill. Check behaviour with `bun run simulate -- --only YourBot`.
 - **News**: add a `defineNews({...})` to `src/news/catalog.ts`. Declare fair-value moves as `fairValueShock` (data, so powers like Embargoed Press Release can read them), not inside `onStart`. Headline definitions are shared by every room, so keep release functions in `state: () => ({...})` (fresh per publication) and undo them in `onEnd`. Hooks can `publish()` a follow-up (`FOLLOW_UPS` in the catalog, not drawn at random) for two-act stories. For a headline that can go either way, give it `variants` (title/description/`fairValueShock`/weight): one is rolled when it's drawn, so the tone always matches the move.
+- **Animations**: `ctx.present(players, { kind: "wheel", segments, result, durationMs })` plays a presentation the UI has built in; mods never ship front-end code. Example: `mods/powers/spin-the-wheel/`. A new kind = a UI component + the type and validation in `powers/presentation.ts` + a mod API bump.
+- **Versioning**: `MOD_API_VERSION` (`src/version.ts`) counts what mods can rely on, server- and client-side. Bump it (and note why in its changelog) when mods gain something, and bump `SUPPORTED_MOD_API` in the UI to match when it's client-side. A power declares the version it needs with `apiVersion` (default 1); an older server refuses to load it with a clear error. The UI footer shows both versions and warns when the server's is newer. `deploy.sh` writes `REVISION` (the commit) into each release; locally it falls back to `git rev-parse`.
 - Hooks from mods run inside try/catch: a throwing power is logged and skipped, and a bot that throws 3 times is benched for the game.
 
 ## Conventions

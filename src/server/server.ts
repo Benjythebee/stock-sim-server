@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS } from "../game/settings";
 import { log } from "../log";
 import { MessageType, MessageTypeNames } from "../protocol/messages";
 import { MAX_FRAME_BYTES, parseClientMessage } from "../protocol/parse";
+import { versionInfo } from "../version";
 
 const PONG = JSON.stringify({ type: MessageType.PONG });
 
@@ -24,6 +25,7 @@ export interface GameServer {
  *   GET /, /zhealth           health checks
  *   GET /api/powers.json      power catalog (UI cards)
  *   GET /api/bots.json        selectable bot strategies (admin UI)
+ *   GET /api/version.json     server version, deployed commit and mod API version (UI footer)
  *   GET /assets/powers/...    files shipped by power mods (icons)
  *   GET /ws/:roomId           WebSocket upgrade. Query: username, spectator, prevSessionData=<roomId>-<playerId>
  */
@@ -62,6 +64,7 @@ export function createServer(config: ServerConfig, catalog: Catalog): GameServer
             "/zhealth": () => json({ ok: true, rooms: rooms.rooms.size }),
             "/api/powers.json": () => json(powersBody),
             "/api/bots.json": () => json(botsBody),
+            "/api/version.json": () => json(versionInfo()),
             ...assetRoutes,
             "/ws/:roomId": (req, srv) => {
                 const roomId = (req.params as { roomId: string }).roomId;

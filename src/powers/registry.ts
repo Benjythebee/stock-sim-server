@@ -3,6 +3,7 @@ import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { log } from "../log";
 import { loadModules, type ModuleSource } from "../modules";
 import { resolveText } from "../text";
+import { MOD_API_VERSION } from "../version";
 import type { AnyPowerDefinition, PublicPower } from "./types";
 
 const TARGETS = new Set(["client", "others", "all", "market"]);
@@ -32,6 +33,8 @@ export function powerProblems(def: AnyPowerDefinition): string[] {
     if (def.state !== undefined && typeof def.state !== "function") problems.push("state must be a function returning fresh state");
     if (def.icon !== undefined && typeof def.icon !== "string") problems.push("icon must be a string");
     if (def.iconCredit !== undefined && typeof def.iconCredit?.author !== "string") problems.push("iconCredit needs an author");
+    if (def.apiVersion !== undefined && !(Number.isInteger(def.apiVersion) && def.apiVersion >= 1)) problems.push("apiVersion must be an integer >= 1");
+    else if ((def.apiVersion ?? 1) > MOD_API_VERSION) problems.push(`needs mod API v${def.apiVersion}, but this server only has v${MOD_API_VERSION}: update the server`);
     return problems;
 }
 

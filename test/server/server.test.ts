@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createServer, type GameServer } from "../../src/server/server";
 import { MessageType } from "../../src/protocol/messages";
+import { MOD_API_VERSION, SERVER_VERSION } from "../../src/version";
 import { builtinCatalog, testConfig } from "../helpers";
 
 let app: GameServer;
@@ -55,6 +56,10 @@ describe("HTTP", () => {
         const list = (await powers.json()) as any[];
         expect(list.map((p) => p.id)).toContain("volatility-storm");
         expect(list[0]).toHaveProperty("iconSlug");
+
+        const version = await fetch(`http://${base}/api/version.json`);
+        expect(version.headers.get("access-control-allow-origin")).toBe("*");
+        expect(await version.json()).toEqual({ version: SERVER_VERSION, revision: expect.any(String), modApi: MOD_API_VERSION });
 
         const bots = (await (await fetch(`http://${base}/api/bots.json`)).json()) as any;
         expect(bots.data.map((b: any) => b.id)).toContain("LiquidityBot");
