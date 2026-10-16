@@ -1,184 +1,88 @@
 # Stock Market Simulation Server
 
-A real-time stock market simulation server built with Bun and TypeScript. This WebSocket-based server provides multi-room trading environments with realistic order book mechanics, AI trading bots, and live market data streaming.
+Real-time multiplayer server for a stock-trading party game. Friends join a room, trade a fictional ticker against each other and AI bots on a real limit order book, and grab Mario Kart-style **powers** from briefcases during the session.
 
-see [Frontend](https://github.com/Benjythebee/stock-sim-ui)
+Frontend: [stock-sim-ui](https://github.com/Benjythebee/stock-sim-ui)
 
 ## Features
 
-- 🏢 **Multi-room Support**: Create and manage multiple trading rooms simultaneously
-- 📈 **Real-time Order Book**: Complete limit/market order matching with depth visualization
-- 🤖 **AI Trading Bots**: Multiple bot strategies (Liquidity, Momentum, Mean Reversion, Random, Informed)
-- 📊 **Live Market Data**: Real-time price movements and portfolio tracking
-- ⚡ **WebSocket API**: Low-latency communication for real-time trading
-- 🎮 **Admin Controls**: Room management with pause/resume and configurable game settings
-- 🧪 **Seeded Randomization**: Reproducible market conditions for testing
+- 🏢 **Rooms**: any number of rooms per server, with lobby settings (starting cash, opening price, volatility, duration, bots, ticker, news)
+- 📈 **Real exchange**: price-time-priority matching engine with limit and market orders, cash/share reservations and exact integer-cent accounting
+- 🤖 **Bots**: liquidity providers, momentum, mean reversion, informed, partially informed, random and spread traders, plus an always-on house market maker
+- 🎁 **Powers as mods**: drop a file in `src/powers/defs/` (or a `POWER_MODS_DIR`) and it shows up in briefcases
+- 📰 **News** that moves the stock's fair value
+- 🔁 **Reconnects**: refresh the page and you keep your seat, cash and shares
+- 🎲 **Deterministic**: the same seed and the same inputs give the same game
+- ⚡ **Fast**: one shared ticker, coalesced broadcasts and Bun pub/sub. 200 players × 25 orders/s run at ~15% of one core.
 
-## Installation
+## Quick start
 
-### Prerequisites
-- [Bun](https://bun.com) v1.3.0 or later
+Requires [Bun](https://bun.sh) ≥ 1.3.
 
-### Setup
 ```bash
-# Clone the repository
-git clone <repository-url>
-cd stock-sim-server
-
-# Install dependencies
 bun install
+bun run dev        # http://localhost:3000, WebSocket at ws://localhost:3000/ws/<roomId>
 ```
 
-## Usage
+| Script | |
+|---|---|
+| `bun run dev` | watch mode |
+| `bun run start` | run without watch |
+| `bun run check` | typecheck + tests |
+| `bun test` | tests only |
+| `bun run simulate -- --bots 10 --minutes 5` | headless market simulation report |
+| `bun run load -- --clients 50 --rate 50` | load test over real WebSockets |
 
-### Development
-```bash
-# Start with hot reload
-bun run dev
+## Configuration (environment)
+
+| Variable | Default | |
+|---|---|---|
+| `PORT` | `3000` | |
+| `HOST` | `localhost` | use `0.0.0.0` to accept remote connections |
+| `CORS_ORIGIN` | `*` | for the JSON API |
+| `LOG_LEVEL` | `info` | `debug` logs every inbound message |
+| `RECONNECT_GRACE_MS` | `60000` | how long a disconnected player keeps their seat |
+| `ORDER_RATE` / `ORDER_BURST` | `20` / `40` | per-player order rate limit (per second / burst) |
+| `FLUSH_MS` | `50` | max delay before price/depth/portfolio updates go out after an order |
+| `POWER_MODS_DIR` / `BOT_MODS_DIR` | none | extra directories of power / bot modules (`;` or `,` separated) |
+
+## API
+
+- `GET /zhealth`: `{ ok, rooms }`
+- `GET /api/powers.json`: the power catalog
+- `GET /api/bots.json`: selectable bot strategies
+- `WS /ws/:roomId?username=…[&spectator][&prevSessionData=<id from the ID message>]`
+
+The message protocol (numeric `type` + fields) is documented in [`src/protocol/messages.ts`](src/protocol/messages.ts).
+
+## Writing a power
+
+```ts
+// src/powers/defs/margin-call.ts
+import { definePower } from "../types";
+
+export default definePower({
+    id: "margin-call",
+    title: "Margin Call",
+    description: "Freeze everyone else's trading for 10 seconds.",
+    icon: "stop",
+    type: "others",
+    weight: 10, // higher = more common in briefcases
+    durationSeconds: 10,
+    state: () => ({ releases: [] as (() => void)[] }),
+    onActivate: (ctx) => {
+        ctx.state.releases = ctx.others.map((p) => p.lockTrading());
+    },
+    onExpire: (ctx) => ctx.state.releases.forEach((release) => release()),
+});
 ```
 
-### Production
-```bash
-# Build the project
-bun run build
-
-# Start the server
-bun run start
-```
-
-### Direct execution
-```bash
-# Run directly
-bun run src/index.ts
-```
-
-The server will start on `http://localhost:3000` (or the port specified in `PORT` environment variable).
-
-## API Endpoints
-
-### HTTP Routes
-- `GET /` - Health check endpoint
-- `GET /zhealth` - Health status
-- `WS /ws/:roomId` - WebSocket connection for specific trading room
-
-### WebSocket Messages
-
-#### Client → Server Messages
-```typescript
-// Join a trading room
-{ type: MessageType.JOIN, roomId: string, id: string }
-
-// Execute a stock trade
-{ type: MessageType.STOCK_ACTION, action: 'BUY'|'SELL', orderType: 'LIMIT'|'MARKET', quantity: number, price: number }
-
-// Admin: Toggle pause/resume (admin only)
-{ type: MessageType.TOGGLE_PAUSE }
-
-// Admin: Update game settings (admin only)
-{ type: MessageType.ADMIN_SETTINGS, settings: Partial<GameSettings> }
-
-// Connection health check
-{ type: MessageType.PING }
-```
-
-#### Server → Client Messages
-```typescript
-// Room state updates
-{ type: MessageType.ROOM_STATE, paused: boolean, settings: GameSettings, roomId: string, clock: number, clients: number }
-
-// Real-time stock price updates
-{ type: MessageType.STOCK_MOVEMENT, price: number, depth: [[number, number][], [number, number][]] }
-
-// Portfolio balance updates
-{ type: MessageType.PORTFOLIO_UPDATE, id: string, value: { cash: number, shares: number } }
-
-// Game clock ticks
-{ type: MessageType.CLOCK, value: number }
-
-// Health check response
-{ type: MessageType.PONG }
-```
-
-## Configuration
-
-### Game Settings
-```typescript
-interface GameSettings {
-    initialPrice: number;     // Starting stock price
-    seed: number;            // Random seed for reproducibility
-    gameDuration: number;    // Game length in minutes
-    marketInfluence: number; // How much trading affects price (0-1)
-    meanReversion: number;   // Strength of price mean reversion (0-1)
-}
-```
-
-### Environment Variables
-- `PORT` - Server port (default: 3000)
-
-## Trading Bots
-
-The simulation includes several AI trading bot strategies:
-
-- **Liquidity Bot**: Provides market liquidity by placing orders around current price
-- **Momentum Bot**: Follows price trends and momentum
-- **Mean Reversion Bot**: Trades against price movements, expecting reversion
-- **Random Bot**: Makes random trading decisions for market noise
-- **Informed Bot**: Has knowledge of intrinsic value for realistic informed trading
+Restart the server and it's in the game. See [`.claude/skills/add-power/SKILL.md`](.claude/skills/add-power/SKILL.md) for the full API. Bots work the same way ([`add-bot`](.claude/skills/add-bot/SKILL.md)).
 
 ## Architecture
 
-### Core Components
-- **Room Manager**: Handles multiple trading room instances
-- **Simulator**: Manages market simulation, bots, and price generation
-- **Order Book**: Real-time order matching and execution
-- **Price Generator**: Realistic stock price movements with configurable parameters
-- **WebSocket Server**: Real-time client communication
-
-### File Structure
-```
-src/
-├── index.ts              # Main server entry point
-├── types.ts              # TypeScript type definitions
-└── lib/
-    ├── bot.ts            # AI trading bot implementations
-    ├── client.ts         # Client connection management
-    ├── orderBookWrapper.ts # Order book abstraction
-    ├── priceGenerator.ts # Stock price simulation
-    ├── room.ts           # Trading room logic
-    ├── roomManager.ts    # Multi-room management
-    ├── simulator.ts      # Core market simulation
-    └── utils/            # Utility functions
-```
-
-## Testing
-
-A test HTML client is provided in `test/simulator.html` for:
-- Real-time price visualization
-- Order book depth display
-- Portfolio tracking
-- WebSocket connection testing
-
-Open `test/simulator.html` in a browser after starting the server to monitor market activity.
-
-## Dependencies
-
-- **nodejs-order-book**: High-performance order book implementation
-- **Bun**: Fast JavaScript runtime and build tool
-- **TypeScript**: Type-safe JavaScript development
-
-## Development
-
-This project uses:
-- **TypeScript** for type safety
-- **Bun** for fast execution and hot reloading
-- **WebSocket** for real-time communication
-- **Modular architecture** for maintainability
-
-### Scripts
-- `bun run dev` - Development with hot reload
-- `bun run build` - Production build
-- `bun run start` - Start production server
+See [CLAUDE.md](CLAUDE.md). In short: a pure, unit-tested `engine/` (order book, accounts, market, price model, RNG); `game/` (Game = one match driven step by step, Room = lobby/network, RoomManager = shared ticker); `protocol/`; `server/`; and the mod folders `bots/`, `powers/` and `news/`.
 
 ## License
 
-MIT License
+MIT

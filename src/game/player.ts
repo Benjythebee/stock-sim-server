@@ -1,0 +1,98 @@
+import { Account } from "../engine/account";
+import { toDollars } from "../engine/money";
+import { MessageType, type Portfolio, type ServerMessage } from "../protocol/messages";
+
+/** The slice of a WebSocket the game needs. Lets tests use fake sockets. */
+export interface Connection {
+    send(data: string): unknown;
+    close(code?: number, reason?: string): void;
+}
+
+/** Token bucket: `capacity` burst, refilled at `perSecond`. */
+export class RateLimiter {
+    private tokens: number;
+    private last = performance.now();
+
+    constructor(
+        private readonly capacity: number,
+        private readonly perSecond: number,
+    ) {
+        this.tokens = capacity;
+    }
+
+    take(): boolean {
+        const now = performance.now();
+        this.tokens = Math.min(this.capacity, this.tokens + ((now - this.last) / 1000) * this.perSecond);
+        this.last = now;
+        if (this.tokens < 1) return false;
+        this.tokens -= 1;
+        return true;
+    }
+}
+
+/**
+ * A human player. Survives disconnects (for a grace period) so a refresh resumes the same seat.
+ * The `account` is replaced whenever the lobby rebuilds the game.
+ */
+export class Player {
+    connection: Connection | null = null;
+    disconnectedAt: number | null = null;
+    removalTimer: ReturnType<typeof setTimeout> | null = null;
+    account: Account;
+    rateLimitedNotified = 0;
+
+    constructor(
+        readonly id: string,
+        public name: string,
+        readonly orderLimiter: RateLimiter,
+    ) {
+        this.account = new Account(id, 0, 0, true);
+    }
+
+    get connected(): boolean {
+        return this.connection !== null;
+    }
+
+    send(message: ServerMessage): void {
+        this.connection?.send(JSON.stringify(message));
+    }
+
+    sendRaw(data: string): void {
+        this.connection?.send(data);
+    }
+
+    portfolio(markTicks: number): Portfolio {
+        return portfolioOf(this.account, markTicks);
+    }
+
+    /**
+     * Disable trading until the returned function is called. Effects stack: trading resumes only
+     * when every lock is released. Releasing twice is a no-op.
+     */
+    lockTrading(): () => void {
+        const account = this.account;
+        account.tradingLocks++;
+        if (account.tradingLocks === 1) this.sendTradingState();
+        let released = false;
+        return () => {
+            if (released) return;
+            released = true;
+            account.tradingLocks--;
+            if (account.tradingLocks === 0 && account === this.account) this.sendTradingState();
+        };
+    }
+
+    sendTradingState(): void {
+        this.send({ type: MessageType.CLIENT_STATE, tradingDisabled: this.account.tradingDisabled });
+    }
+}
+
+export function portfolioOf(account: Account, markTicks: number): Portfolio {
+    return {
+        cash: toDollars(account.availableCash),
+        shares: account.availableShares,
+        pnl: toDollars(account.pnl(markTicks)),
+        reservedCash: toDollars(account.reservedCash),
+        reservedShares: account.reservedShares,
+    };
+}
