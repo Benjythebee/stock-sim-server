@@ -40,6 +40,8 @@ export function parseClientMessage(raw: string | Buffer): ClientMessage | null {
             return m.settings && typeof m.settings === "object" && !Array.isArray(m.settings)
                 ? { type: MessageType.ADMIN_SETTINGS, settings: m.settings as Record<string, unknown> }
                 : null;
+        case MessageType.RESET_GAME:
+            return { type: MessageType.RESET_GAME };
         case MessageType.POWER_SELECT: {
             const index = num(m.index);
             return Number.isInteger(index) && index >= POWER_SKIP_INDEX ? { type: MessageType.POWER_SELECT, index } : null;

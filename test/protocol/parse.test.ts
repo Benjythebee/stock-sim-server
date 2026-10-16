@@ -61,6 +61,7 @@ describe("parseClientMessage", () => {
         expect(parse({ type: 13, target: "moon" })).toBeNull();
         expect(parse({ type: 30, settings: { bots: 3 } })).toEqual({ type: MessageType.ADMIN_SETTINGS, settings: { bots: 3 } });
         expect(parse({ type: 30, settings: [1] })).toBeNull();
+        expect(parse({ type: 31 })).toEqual({ type: MessageType.RESET_GAME });
     });
 
     test("ping", () => {

@@ -32,6 +32,7 @@ export enum MessageType {
     ORDER_CANCEL = 20,
 
     ADMIN_SETTINGS = 30,
+    RESET_GAME = 31,
 
     GAME_CONCLUSION = 60,
 
@@ -94,6 +95,8 @@ export type StockActionMessage = {
 };
 export type ShockMessage = { type: MessageType.SHOCK; target: "intrinsic" | "market" };
 export type AdminSettingsMessage = { type: MessageType.ADMIN_SETTINGS; settings: Record<string, unknown> };
+/** Host only, after the game ended: back to the lobby with the same settings (and a new seed). */
+export type ResetGameRequest = { type: MessageType.RESET_GAME };
 /** Index into the current offers, or POWER_SKIP_INDEX (-1) to decline the whole briefcase. */
 export type PowerSelectMessage = { type: MessageType.POWER_SELECT; index: number };
 export const POWER_SKIP_INDEX = -1;
@@ -108,6 +111,7 @@ export type ClientMessage =
     | StockActionMessage
     | ShockMessage
     | AdminSettingsMessage
+    | ResetGameRequest
     | PowerSelectMessage
     | PowerConsumeRequest
     | OrderCancelRequest;

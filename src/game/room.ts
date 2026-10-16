@@ -202,6 +202,8 @@ export class Room {
                 return this.togglePause();
             case MessageType.ADMIN_SETTINGS:
                 return this.updateSettings(player, msg.settings);
+            case MessageType.RESET_GAME:
+                return this.resetGame(player);
             case MessageType.SHOCK:
                 if (this.phase !== "running") return;
                 if (msg.target === "intrinsic") this.game.model.shockIntrinsic(this.game.rng.signed() * 0.8);
@@ -220,6 +222,20 @@ export class Room {
     updateSettings(admin: Player, update: Record<string, unknown>): void {
         if (this.phase !== "lobby") return this.tell(admin, "error", "Game in progress", "Settings can only be changed before the game starts.");
         this.settings = applySettingsUpdate(this.settings, update, this.host.catalog.bots.enabledIds());
+        this.rebuild();
+    }
+
+    /** After the game ended: back to the lobby, same settings, new seed (so the rematch plays out differently). */
+    resetGame(admin: Player): void {
+        if (this.phase !== "ended") return this.tell(admin, "error", "Game in progress", "The game can only be reset once it has ended.");
+        this.settings = { ...this.settings, seed: Math.floor(Math.random() * 100_000) };
+        this.phase = "lobby";
+        this.rebuild();
+        log.info(`[${this.id}] back to the lobby`);
+    }
+
+    /** Fresh Game for the current settings: everyone gets a new account, and the lobby state is pushed. */
+    private rebuild(): void {
         this.game.dispose();
         this.game = this.createGame();
         for (const player of this.players.values()) {

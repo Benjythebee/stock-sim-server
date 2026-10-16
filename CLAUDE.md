@@ -85,7 +85,7 @@ scripts/                load.ts, simulate.ts
 
 ### Rooms (game/room.ts)
 
-- Phases: `lobby` → `running` ⇄ `paused` → `ended`. Settings are editable **only in the lobby**; each update rebuilds the Game (fresh accounts for everyone).
+- Phases: `lobby` → `running` ⇄ `paused` → `ended` → (host `RESET_GAME`) `lobby`. Settings are editable **only in the lobby**; each update rebuilds the Game (fresh accounts for everyone). `RESET_GAME` (31, host only, only once ended) rebuilds with the same settings and a new seed, so the rematch plays out differently.
 - The first player is admin. Admin passes to the next player when the admin is *removed* (after the reconnect grace period, default 60s), not on a brief disconnect.
 - Reconnect: the `ID` message carries `<roomId>-<playerId>`. The UI sends it back as `?prevSessionData=` and gets the same seat back. A newer socket for the same player **detaches the old one without closing it**. Closing it makes the UI reconnect in a loop.
 - Orders are only accepted while running, and are rate-limited per player (token bucket, `ORDER_RATE`/`ORDER_BURST`).

@@ -207,6 +207,41 @@ describe("Room: lifecycle", () => {
         expect(spec.of(MessageType.GAME_CONCLUSION)).toEqual([final]);
     });
 
+    test("the host can send an ended room back to the lobby with the same settings", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        const b = join("bob");
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { gameDuration: 1, startingCash: 2_500 } });
+
+        // Not before the end, and only the host.
+        room.handle(a.socket, { type: MessageType.RESET_GAME });
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Game in progress" });
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        for (let i = 0; i < 300; i++) room.tick();
+        expect(room.phase).toBe("ended");
+        room.handle(b.socket, { type: MessageType.RESET_GAME });
+        expect(room.phase).toBe("ended");
+        expect(b.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Host only" });
+
+        const ended = room.game;
+        const seed = room.settings.seed;
+        b.socket.clear();
+        room.handle(a.socket, { type: MessageType.RESET_GAME });
+        expect(room.phase).toBe("lobby");
+        expect(room.game).not.toBe(ended);
+        expect(room.game.result).toBeFalsy();
+        expect(room.settings).toMatchObject({ gameDuration: 1, startingCash: 2_500 });
+        expect(room.settings.seed).not.toBe(seed);
+        expect(b.socket.last(MessageType.ROOM_STATE)).toMatchObject({ started: false, ended: false, paused: true });
+        expect(b.socket.last(MessageType.PORTFOLIO_UPDATE)!.value.cash).toBe(2_500);
+
+        // And it plays again.
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.tick();
+        expect(room.phase).toBe("running");
+        expect(room.game.step).toBe(1);
+    });
+
     test("no conclusion is sent to anyone joining before the game has ended", () => {
         const { host, room, join } = lobby();
         const a = join("alice");
