@@ -41,31 +41,114 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         durationSeconds: 20,
         fairValueShock: 0.1,
     }),
+
+    // Headlines with `variants` roll their direction when drawn, and the tone matches the move.
+    // A 0 variant keeps a headline as noise that only spooks the crowd.
     defineNews({
-        title: "Economic Growth Surges",
-        description: "Recent reports indicate a significant increase in economic activity across multiple sectors.",
+        title: "GDP Figures Released",
+        description: "The latest quarterly growth numbers are out.",
         durationSeconds: 20,
+        variants: [
+            {
+                title: "Economic Growth Surges",
+                description: "GDP blows past forecasts, with activity up across almost every sector.",
+                fairValueShock: 0.05,
+            },
+            {
+                title: "Economy Grows in Line With Forecasts",
+                description: "Steady, unspectacular growth. Economists call it 'fine'.",
+                fairValueShock: 0,
+            },
+            {
+                title: "Economy Unexpectedly Shrinks",
+                description: "GDP contracts for the quarter, and the word 'recession' is suddenly everywhere.",
+                fairValueShock: -0.05,
+            },
+        ],
     }),
     defineNews({
         title: ({ ticker }) => `Breaking News for ticker $${ticker}`,
         description: "A major development has occurred affecting the stock market.",
         durationSeconds: 20,
+        variants: [
+            {
+                title: ({ ticker }) => `Breaking: $${ticker} Lands a Huge Government Contract`,
+                description: "A multi-year deal that analysts say could double next year's revenue.",
+                fairValueShock: 0.08,
+            },
+            {
+                title: ({ ticker }) => `Breaking: $${ticker} Unveils a New Logo`,
+                description: "It's the old logo, but slightly bluer. The internet has opinions.",
+                fairValueShock: 0,
+            },
+            {
+                title: ({ ticker }) => `Breaking: $${ticker} Recalls Its Flagship Product`,
+                description: "Reports of units overheating force a costly worldwide recall.",
+                fairValueShock: -0.08,
+            },
+        ],
     }),
     defineNews({
         title: "Federal Reserve Announces Interest Rate Decision",
         description: "The central bank's latest monetary policy announcement sends ripples through financial markets.",
         durationSeconds: 25,
-        fairValueShock: -0.05,
+        variants: [
+            {
+                title: "Fed Surprises Markets With a Rate Cut",
+                description: "Cheaper money is on the way, and investors are already celebrating.",
+                fairValueShock: 0.05,
+            },
+            {
+                title: "Fed Holds Rates Steady",
+                description: "No change, exactly as expected. The press conference was mostly about the weather.",
+                fairValueShock: 0,
+            },
+            {
+                title: "Fed Hikes Rates to Fight Inflation",
+                description: "Borrowing just got more expensive, and growth stocks feel it first.",
+                fairValueShock: -0.05,
+                weight: 2,
+            },
+        ],
     }),
     defineNews({
-        title: "Merger & Acquisition Activity Heats Up",
-        description: "Several major corporations announce strategic partnerships and acquisition deals this quarter.",
+        title: "Merger & Acquisition Activity",
+        description: "Corporations announce partnerships and acquisition deals this quarter.",
         durationSeconds: 30,
+        variants: [
+            {
+                title: "Merger & Acquisition Activity Heats Up",
+                description: "Buyers are paying fat premiums, and every stock in the sector suddenly looks like a target.",
+                fairValueShock: 0.04,
+            },
+            {
+                title: "Merger Wave Fizzles as Deals Fall Through",
+                description: "Several high-profile acquisitions collapse, and the takeover premium leaks out of the sector.",
+                fairValueShock: -0.04,
+            },
+        ],
     }),
     defineNews({
         title: "Earnings Season Kicks Off",
         description: "Major companies begin reporting quarterly earnings with mixed results across industries.",
         durationSeconds: 15,
+        variants: [
+            {
+                title: "Earnings Season Opens With a Wave of Beats",
+                description: "Company after company tops expectations, and guidance is being raised across the board.",
+                fairValueShock: 0.04,
+            },
+            {
+                title: "Earnings Season Kicks Off With Mixed Results",
+                description: "Some beats, some misses. Nobody can agree on what it means.",
+                fairValueShock: 0,
+            },
+            {
+                title: "Earnings Season Opens With a String of Misses",
+                description: "Profit warnings pile up as companies blame costs, the weather and 'macro headwinds'.",
+                fairValueShock: -0.04,
+            },
+        ],
     }),
     defineNews({
         title: "Regulatory Changes Impact Industry",
@@ -77,11 +160,47 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         title: "Oil Prices Fluctuate on Supply Concerns",
         description: "Energy markets react to geopolitical tensions and supply chain disruptions.",
         durationSeconds: 18,
+        variants: [
+            {
+                title: "Oil Prices Tumble as Supply Fears Ease",
+                description: "Cheaper energy means lower costs and fatter margins for almost everyone.",
+                fairValueShock: 0.03,
+            },
+            {
+                title: "Oil Spikes on Supply Disruption",
+                description: "A pipeline outage sends crude soaring, and companies brace for higher costs.",
+                fairValueShock: -0.04,
+            },
+        ],
     }),
     defineNews({
         title: "Consumer Confidence Index Released",
         description: "Latest consumer sentiment data reveals changing spending patterns and economic outlook.",
         durationSeconds: 22,
+        variants: [
+            {
+                title: "Consumer Confidence Hits Record High",
+                description: "Shoppers are in a spending mood: the latest survey shows the strongest sentiment in years.",
+                fairValueShock: 0.06,
+            },
+            {
+                title: "Consumer Sentiment Edges Into Positive Territory",
+                description: "The latest report shows households cautiously optimistic about the months ahead.",
+                fairValueShock: 0.02,
+                weight: 2,
+            },
+            {
+                title: "Consumer Sentiment Slips, Latest Report Shows",
+                description: "Households are tightening their belts as worries about the economy creep back in.",
+                fairValueShock: -0.02,
+                weight: 2,
+            },
+            {
+                title: "Consumer Confidence Plunges to Multi-Year Low",
+                description: "Shoppers are spooked: the latest survey shows sentiment collapsing across every income group.",
+                fairValueShock: -0.06,
+            },
+        ],
     }),
     defineNews({
         title: "Cryptocurrency Market Volatility",
@@ -90,14 +209,43 @@ export const NEWS_CATALOG: NewsDefinition[] = [
         fairValueShock: 0.5,
     }),
     defineNews({
-        title: "Infrastructure Investment Plan Announced",
-        description: "Government unveils major infrastructure spending program affecting construction and materials sectors.",
+        title: "Infrastructure Investment Plan",
+        description: "Lawmakers vote on a major infrastructure spending program.",
         durationSeconds: 40,
+        variants: [
+            {
+                title: "Infrastructure Investment Plan Passes",
+                description: "Billions in new spending on roads, grids and broadband. Suppliers are already hiring.",
+                fairValueShock: 0.05,
+            },
+            {
+                title: "Infrastructure Bill Stalls in Committee",
+                description: "The spending plan is stuck in a partisan fight, and the projects it promised are on hold.",
+                fairValueShock: -0.03,
+            },
+        ],
     }),
     defineNews({
         title: "Trade Negotiations Update",
         description: "International trade talks progress as nations work to resolve ongoing commercial disputes.",
         durationSeconds: 28,
+        variants: [
+            {
+                title: "Breakthrough in Trade Talks: Tariffs to Be Lifted",
+                description: "Negotiators shake hands on a deal that reopens key export markets.",
+                fairValueShock: 0.05,
+            },
+            {
+                title: "Trade Talks Drag On With No Deal in Sight",
+                description: "Another round of meetings, another round of 'constructive discussions'.",
+                fairValueShock: 0,
+            },
+            {
+                title: "Trade Talks Collapse, New Tariffs Announced",
+                description: "Retaliatory tariffs hit next month, and supply chains are scrambling.",
+                fairValueShock: -0.06,
+            },
+        ],
     }),
 
     // --- Headlines with effects beyond a fair-value move ---

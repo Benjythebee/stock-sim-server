@@ -68,4 +68,26 @@ describe("embargoed-press-release (mods/powers/embargoed-press-release)", () => 
         runSeconds(game, 60);
         expect(headlines()).toHaveLength(0);
     });
+    test("a headline with variants is rolled before the preview, so the preview matches what goes out", () => {
+        const mixed = defineNews({
+            title: "Survey released",
+            description: "d",
+            variants: [
+                { title: "Survey: boom", fairValueShock: 0.1 },
+                { title: "Survey: bust", fairValueShock: -0.1 },
+            ],
+        });
+        for (let i = 0; i < 6; i++) {
+            const { game, a, headlines } = arena([mixed]);
+            runSeconds(game, 2 + i);
+            game.powers.activate(pressRelease, a.player);
+            const preview = a.socket.last(MessageType.NOTIFICATION)!.description;
+            const intrinsic = game.model.intrinsic;
+            runSeconds(game, 10);
+            const published = headlines()[0]!.title;
+            expect(preview).toStartWith(`"${published}"`);
+            expect(preview).toContain(published === "Survey: boom" ? "Bullish" : "Bearish");
+            expect(game.model.intrinsic).toBeCloseTo(intrinsic * (published === "Survey: boom" ? 1.1 : 0.9));
+        }
+    });
 });

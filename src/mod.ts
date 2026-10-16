@@ -14,7 +14,7 @@ export type { BotDefinition, BotStrategy, BotView } from "./bots/types";
 export { ceilCents, floorCents, quotePair, momentum } from "./bots/helpers";
 
 export { defineNews } from "./news/types";
-export type { NewsContext, NewsDefinition, UpcomingNews } from "./news/types";
+export type { NewsContext, NewsDefinition, NewsVariant, UpcomingNews } from "./news/types";
 
 export type { Player } from "./game/player";
 export type { Notification } from "./protocol/messages";

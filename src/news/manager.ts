@@ -1,4 +1,4 @@
-import type { Rng } from "../engine/rng";
+import { weightedSample, type Rng } from "../engine/rng";
 import type { Game } from "../game/game";
 import { log } from "../log";
 import { MessageType } from "../protocol/messages";
@@ -56,6 +56,7 @@ export class NewsManager {
     }
 
     publish(news: NewsDefinition): void {
+        news = this.rollVariant(news);
         const ticker = this.game.settings.ticketName;
         const durationSeconds = news.durationSeconds ?? 0;
         this.published++;
@@ -80,7 +81,7 @@ export class NewsManager {
     upcoming(withinSeconds: number): UpcomingNews | null {
         if (this.catalog.length === 0) return null;
         const now = this.game.elapsedSeconds;
-        this.next ??= this.rng.pick(this.catalog)!;
+        this.next ??= this.draw();
         this.nextAt = Math.max(now + 1, Math.min(this.nextAt, now + withinSeconds));
         return { news: this.next, inSeconds: this.nextAt - now };
     }
@@ -88,7 +89,7 @@ export class NewsManager {
     /** Called once per game second. */
     onSecond(elapsedSeconds: number): void {
         if (this.catalog.length && elapsedSeconds >= this.nextAt) {
-            this.publish(this.next ?? this.rng.pick(this.catalog)!);
+            this.publish(this.next ?? this.draw());
             this.next = null;
             const delay = this.randomDelay();
             this.nextAt = this.randomNews ? elapsedSeconds + delay : Infinity;
@@ -106,6 +107,20 @@ export class NewsManager {
 
     dispose(): void {
         this.live = [];
+    }
+
+    /** A random catalog headline, with its variant already rolled. */
+    private draw(): NewsDefinition {
+        return this.rollVariant(this.rng.pick(this.catalog)!);
+    }
+
+    /** Settle which version of a headline with `variants` goes out (a no-op for plain headlines). */
+    private rollVariant(news: NewsDefinition): NewsDefinition {
+        if (!news.variants?.length) return news;
+        const [variant] = weightedSample(this.rng, news.variants, (v) => v.weight ?? 1, 1);
+        if (!variant) return news;
+        const { weight: _, ...fields } = variant;
+        return { ...news, ...fields, variants: undefined };
     }
 
     private randomDelay(): number {

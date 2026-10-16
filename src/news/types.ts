@@ -29,6 +29,12 @@ export interface NewsDefinition<S extends object = Record<string, never>> {
      */
     fairValueShock?: number;
     /**
+     * Alternative versions of the headline. One is rolled when the headline is drawn (before
+     * Embargoed Press Release can peek at it) and overrides the fields above, so the wording and
+     * the fair-value move always agree: "Consumer confidence plunges" comes with the drop.
+     */
+    variants?: readonly NewsVariant[];
+    /**
      * Fresh state for each publication. Store temporary effects' release functions here (e.g.
      * `model.boostVolatility()`) and call them in onEnd.
      */
@@ -38,6 +44,15 @@ export interface NewsDefinition<S extends object = Record<string, never>> {
     onTick?(ctx: NewsContext<S>): void;
     /** When the duration runs out. */
     onEnd?(ctx: NewsContext<S>): void;
+}
+
+/** One version of a headline with `variants`. Omitted fields come from the headline itself. */
+export interface NewsVariant {
+    title?: NewsText;
+    description?: NewsText;
+    fairValueShock?: number;
+    /** Relative odds of this version. Defaults to 1. */
+    weight?: number;
 }
 
 /** A headline that's coming soon, as revealed by NewsManager.upcoming(). */

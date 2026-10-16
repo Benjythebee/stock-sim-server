@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { FOLLOW_UPS, NEWS_CATALOG } from "../../src/news/catalog";
 import { MessageType, type NewsMessage } from "../../src/protocol/messages";
+import { DEFAULT_SETTINGS } from "../../src/game/settings";
+import { resolveText } from "../../src/text";
 import { makeGame, makePlayer, runSeconds } from "../helpers";
 
 const headline = (prefix: string) => {
@@ -131,6 +133,43 @@ describe("news catalog", () => {
         game.news.publish(headline("Unclaimed Briefcase"));
         expect(alice.socket.last(MessageType.POWER_OFFERS)!.offers.length).toBeGreaterThan(0);
         expect(bob.socket.last(MessageType.POWER_OFFERS)!.offers.length).toBeGreaterThan(0);
+    });
+
+    test("consumer confidence: the tone of the report matches which way the fair value moves", () => {
+        const seen = new Map<string, number>();
+        for (let seed = 1; seed <= 40; seed++) {
+            const { game, broadcasts } = makeGame({ seed });
+            const intrinsic = game.model.intrinsic;
+            game.news.publish(headline("Consumer Confidence Index"));
+            const news = broadcasts.find((m): m is NewsMessage => m.type === MessageType.NEWS)!;
+            seen.set(news.title, game.model.intrinsic / intrinsic - 1);
+        }
+        expect(seen.size).toBe(4);
+        expect(seen.get("Consumer Confidence Hits Record High")).toBeCloseTo(0.06);
+        expect(seen.get("Consumer Sentiment Edges Into Positive Territory")).toBeCloseTo(0.02);
+        expect(seen.get("Consumer Sentiment Slips, Latest Report Shows")).toBeCloseTo(-0.02);
+        expect(seen.get("Consumer Confidence Plunges to Multi-Year Low")).toBeCloseTo(-0.06);
+    });
+
+    test("every headline with variants goes out as each of its versions, moving the fair value as that version says", () => {
+        const withVariants = NEWS_CATALOG.filter((n) => n.variants?.length);
+        expect(withVariants.length).toBeGreaterThanOrEqual(9);
+        for (const news of withVariants) {
+            const ticker = DEFAULT_SETTINGS.ticketName;
+            const expected = new Map(news.variants!.map((v) => [resolveText(v.title ?? news.title, ticker), v.fairValueShock ?? 0]));
+            expect(expected.size).toBe(news.variants!.length); // every version has its own headline
+            const seen = new Set<string>();
+            for (let seed = 1; seed <= 200 && seen.size < expected.size; seed++) {
+                const { game, broadcasts } = makeGame({ seed });
+                const intrinsic = game.model.intrinsic;
+                game.news.publish(news);
+                const title = broadcasts.find((m): m is NewsMessage => m.type === MessageType.NEWS)!.title;
+                expect(expected.has(title)).toBe(true);
+                expect(game.model.intrinsic / intrinsic - 1).toBeCloseTo(expected.get(title)!);
+                seen.add(title);
+            }
+            expect(seen.size).toBe(expected.size);
+        }
     });
 
     test("follow-ups are not drawn at random", () => {
