@@ -6,7 +6,7 @@ export default definePower({
     description: "Launch a DDoS attack on all traders, disabling their ability to trade for 15 seconds.",
     icon: "stop",
     type: "others",
-    weight: 40,
+    weight: 20,
     durationSeconds: 15,
     state: () => ({ releases: [] as (() => void)[] }),
 

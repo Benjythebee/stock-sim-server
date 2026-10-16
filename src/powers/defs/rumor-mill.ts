@@ -6,7 +6,7 @@ export default definePower({
     description: "Spread a false rumor that jolts the market up or down for a few seconds (everyone suffers).",
     icon: "talk",
     type: "market",
-    weight: 20,
+    weight: 25,
 
     onActivate(ctx) {
         // ±5% extra drift per step for 10 steps (2s), then mean reversion pulls it back.

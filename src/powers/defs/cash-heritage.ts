@@ -7,7 +7,7 @@ export default definePower({
     icon: "present",
     type: "client",
     instant: true,
-    weight: 40,
+    weight: 10,
 
     onActivate(ctx) {
         // Between $1,000 and $1,000 + the starting cash, so it scales with the game.

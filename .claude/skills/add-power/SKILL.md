@@ -32,7 +32,7 @@ export default definePower({
 });
 ```
 
-Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip 15, siphon 15, dark-pool 15, golden-parachute 15, embargoed-press-release 15, wiretap 15, burner-phone 15, special-dividend 15, copycat 10, fat-finger 10, hot-potato 10, bullet-bill 10, pump-and-dump 10, influencer 10, loan-shark 10, storm 5.
+Current weights, for balancing: homeless 40, rumor 25, ddos 20, insider-tip 15, siphon 15, dark-pool 15, golden-parachute 15, embargoed-press-release 15, wiretap 15, burner-phone 15, special-dividend 15, heritage 10, copycat 10, fat-finger 10, hot-potato 10, bullet-bill 10, pump-and-dump 10, influencer 10, loan-shark 10, storm 5. With 3 offers per briefcase, weight 10 shows up in about 1 briefcase in 10.
 
 ## 2. What `ctx` gives you (src/powers/types.ts)
 
