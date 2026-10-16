@@ -6,13 +6,12 @@ import type { SocketData } from "../game/room";
 import { DEFAULT_SETTINGS } from "../game/settings";
 import { log } from "../log";
 import { MessageType, MessageTypeNames } from "../protocol/messages";
-import { MAX_FRAME_BYTES, parseClientMessage } from "../protocol/parse";
+import { cleanName, MAX_FRAME_BYTES, parseClientMessage } from "../protocol/parse";
 import { versionInfo } from "../version";
 
 const PONG = JSON.stringify({ type: MessageType.PONG });
 
-const cleanName = (raw: string | null) =>
-    (raw ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 32) || `Trader-${Math.floor(Math.random() * 9000 + 1000)}`;
+const usernameOrDefault = (raw: string | null) => cleanName(raw ?? "") || `Trader-${Math.floor(Math.random() * 9000 + 1000)}`;
 
 export interface GameServer {
     server: Server<SocketData>;
@@ -74,7 +73,7 @@ export function createServer(config: ServerConfig, catalog: Catalog): GameServer
                 // prevSessionData is the ID message we sent earlier: "<roomId>-<playerId>".
                 const prev = url.searchParams.get("prevSessionData");
                 const resume = prev?.startsWith(`${roomId}-`) ? prev.slice(roomId.length + 1) : null;
-                const data: SocketData = { roomId, username: cleanName(url.searchParams.get("username")), spectator, resume, playerId: null };
+                const data: SocketData = { roomId, username: usernameOrDefault(url.searchParams.get("username")), spectator, resume, playerId: null };
                 if (srv.upgrade(req, { data })) return undefined;
                 return new Response("Upgrade failed", { status: 400 });
             },

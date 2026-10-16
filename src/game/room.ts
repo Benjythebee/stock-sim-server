@@ -112,6 +112,7 @@ export class Room {
         if (!this.adminId) this.adminId = player.id;
         socket.subscribe(this.id);
         this.sendWelcome(player);
+        this.sendPlayers();
         return player;
     }
 
@@ -121,6 +122,7 @@ export class Room {
         socket.send(JSON.stringify(this.contentManifest()));
         socket.send(JSON.stringify(this.roomState()));
         socket.send(this.game.depthMessageJson());
+        socket.send(JSON.stringify(this.playersMessage(-1)));
         // Late spectators of a finished game still get the leaderboard.
         if (this.game.result) socket.send(JSON.stringify(this.game.result));
     }
@@ -136,6 +138,7 @@ export class Room {
         player.connection = null;
         player.disconnectedAt = Date.now();
         player.removalTimer = setTimeout(() => this.remove(player), this.host.config.reconnectGraceMs);
+        this.sendPlayers();
     }
 
     remove(player: Player): void {
@@ -151,6 +154,7 @@ export class Room {
             next?.send({ type: MessageType.IS_ADMIN });
         }
         if (this.players.size === 0) this.host.roomEmpty(this);
+        else this.sendPlayers();
     }
 
     // ---- messages ----------------------------------------------------------------------
@@ -195,6 +199,11 @@ export class Room {
             case MessageType.POWER_CONSUME:
                 if (this.phase !== "running") return this.tell(player, "warning", "Not now", "Powers can only be used while the game is running.");
                 if (this.game.powers.consume(player, msg.id)) this.scheduleFlush();
+                return;
+            case MessageType.RENAME:
+                // Nothing to broadcast: names only show up later (leaderboard, power notifications), read live.
+                player.name = msg.username;
+                this.sendPlayers();
                 return;
         }
 
@@ -291,6 +300,24 @@ export class Room {
             clients: this.players.size,
             price: this.game.market.price,
         };
+    }
+
+    /** The room's humans for one recipient: `you` is their index in the list (-1 for spectators). */
+    playersMessage(you: number): ServerMessage {
+        const players = [...this.players.values()].map((p) => ({ name: p.name, connected: p.connected, host: p.id === this.adminId }));
+        return { type: MessageType.PLAYERS, players, you };
+    }
+
+    /**
+     * Push the player list to everyone. Each player gets their own `you`, so this can't be one
+     * pub/sub broadcast, but it only runs on membership changes, never in the game loop.
+     */
+    private sendPlayers(): void {
+        let index = 0;
+        for (const player of this.players.values()) player.send(this.playersMessage(index++));
+        if (this.spectators.size === 0) return;
+        const json = JSON.stringify(this.playersMessage(-1));
+        for (const s of this.spectators) s.send(json);
     }
 
     /** Installed content (all powers incl. mods) and the assets the client should preload. */

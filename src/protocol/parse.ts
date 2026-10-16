@@ -3,6 +3,12 @@ import { MessageType, ORDER_CANCEL_ALL, POWER_SKIP_INDEX, type ClientMessage } f
 /** Inbound frames larger than this are dropped without parsing. */
 export const MAX_FRAME_BYTES = 8 * 1024;
 
+/** Longest display name kept, in characters. */
+export const MAX_NAME_LENGTH = 32;
+
+/** A display name without control characters or surrounding spaces, cut to MAX_NAME_LENGTH. May be empty. */
+export const cleanName = (raw: string): string => raw.replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, MAX_NAME_LENGTH);
+
 const num = (v: unknown): number => (typeof v === "number" ? v : typeof v === "string" && v.trim() !== "" ? Number(v) : NaN);
 
 /**
@@ -51,6 +57,10 @@ export function parseClientMessage(raw: string | Buffer): ClientMessage | null {
         case MessageType.ORDER_CANCEL: {
             const id = num(m.id);
             return Number.isSafeInteger(id) && (id > 0 || id === ORDER_CANCEL_ALL) ? { type: MessageType.ORDER_CANCEL, id } : null;
+        }
+        case MessageType.RENAME: {
+            const username = typeof m.username === "string" ? cleanName(m.username) : "";
+            return username ? { type: MessageType.RENAME, username } : null;
         }
         default:
             return null;

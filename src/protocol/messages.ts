@@ -31,6 +31,8 @@ export enum MessageType {
     CONTENT_MANIFEST = 18,
     ORDER_UPDATE = 19,
     ORDER_CANCEL = 20,
+    RENAME = 21,
+    PLAYERS = 22,
 
     ADMIN_SETTINGS = 30,
     RESET_GAME = 31,
@@ -106,6 +108,8 @@ export type PowerConsumeRequest = { type: MessageType.POWER_CONSUME; id: string 
 /** Cancel one of your open orders by OrderInfo.id, or all of them with ORDER_CANCEL_ALL (-1). */
 export type OrderCancelRequest = { type: MessageType.ORDER_CANCEL; id: number };
 export const ORDER_CANCEL_ALL = -1;
+/** Change your display name (any phase). `username` is already cleaned by the parser (see cleanName). */
+export type RenameRequest = { type: MessageType.RENAME; username: string };
 
 export type ClientMessage =
     | PingMessage
@@ -116,13 +120,23 @@ export type ClientMessage =
     | ResetGameRequest
     | PowerSelectMessage
     | PowerConsumeRequest
-    | OrderCancelRequest;
+    | OrderCancelRequest
+    | RenameRequest;
 
 // ---- server -> client --------------------------------------------------------------------
 
 export type IdMessage = { type: MessageType.ID; id: string };
 export type JoinMessage = { type: MessageType.JOIN; roomId: string; id: string; username: string };
 export type LeaveMessage = { type: MessageType.LEAVE; roomId: string; id: string };
+/** One human in the room. No id on purpose: a player id is the seat's resume secret. */
+export interface PlayerInfo {
+    name: string;
+    /** False while their seat is held for a reconnect. */
+    connected: boolean;
+    host: boolean;
+}
+/** Everyone in the room, re-sent whole on any change (join, leave, rename, new host). `you` is the recipient's index, -1 for spectators. */
+export type PlayersMessage = { type: MessageType.PLAYERS; players: PlayerInfo[]; you: number };
 export type IsAdminMessage = { type: MessageType.IS_ADMIN };
 /** `paused` is the new absolute state; clients must set it rather than toggle. */
 export type TogglePauseMessage = { type: MessageType.TOGGLE_PAUSE; paused: boolean };
@@ -192,6 +206,7 @@ export type ServerMessage =
     | IdMessage
     | JoinMessage
     | LeaveMessage
+    | PlayersMessage
     | IsAdminMessage
     | TogglePauseMessage
     | ErrorMessage

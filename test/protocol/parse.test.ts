@@ -55,6 +55,14 @@ describe("parseClientMessage", () => {
         expect(parse({ type: 20 })).toBeNull();
     });
 
+    test("rename: a cleaned, non-empty name", () => {
+        expect(parse({ type: 21, username: "  Bob\u0007 " })).toEqual({ type: MessageType.RENAME, username: "Bob" });
+        expect(parse({ type: 21, username: "x".repeat(40) })).toEqual({ type: MessageType.RENAME, username: "x".repeat(32) });
+        expect(parse({ type: 21, username: "   " })).toBeNull();
+        expect(parse({ type: 21, username: 5 })).toBeNull();
+        expect(parse({ type: 21 })).toBeNull();
+    });
+
     test("admin", () => {
         expect(parse({ type: 3 })).toEqual({ type: MessageType.TOGGLE_PAUSE });
         expect(parse({ type: 13, target: "market" })).toEqual({ type: MessageType.SHOCK, target: "market" });

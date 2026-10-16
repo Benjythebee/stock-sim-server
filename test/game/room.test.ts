@@ -32,7 +32,9 @@ describe("Room: joining", () => {
             MessageType.ORDER_UPDATE,
             MessageType.CLIENT_STATE,
             MessageType.POWER_INVENTORY,
+            MessageType.PLAYERS,
         ]);
+        expect(socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "alice", connected: true, host: true }], you: 0 });
         expect(socket.last(MessageType.ORDER_UPDATE)).toMatchObject({ orders: [], reset: true });
         expect(socket.last(MessageType.ID)!.id).toBe(`r1-${player.id}`);
         expect(socket.last(MessageType.ROOM_STATE)).toMatchObject({ paused: true, started: false, ended: false, clients: 1, roomId: "r1" });
@@ -69,6 +71,41 @@ describe("Room: joining", () => {
         expect(again.player).toBe(a.player);
         expect(b.socket.of(MessageType.JOIN)).toHaveLength(0);
         expect(again.socket.of(MessageType.IS_ADMIN)).toHaveLength(1);
+        expect(room.players.size).toBe(2);
+    });
+
+    test("everyone gets the player list on join, disconnect, rename and removal, with their own index and no ids", async () => {
+        const { host, room, join } = lobby();
+        const a = join("alice");
+        const b = join("bob");
+        const spec = host.socket("r1", "tv", { spectator: true });
+        room.spectate(spec);
+        expect(a.socket.last(MessageType.PLAYERS)).toEqual({
+            type: MessageType.PLAYERS,
+            players: [{ name: "alice", connected: true, host: true }, { name: "bob", connected: true, host: false }],
+            you: 0,
+        });
+        expect(b.socket.last(MessageType.PLAYERS)!.you).toBe(1);
+        expect(spec.last(MessageType.PLAYERS)!.you).toBe(-1);
+        expect(JSON.stringify(b.socket.last(MessageType.PLAYERS))).not.toContain(a.player.id);
+
+        room.handle(b.socket, { type: MessageType.RENAME, username: "Bobby" });
+        expect(a.socket.last(MessageType.PLAYERS)!.players[1]!.name).toBe("Bobby");
+        expect(spec.last(MessageType.PLAYERS)!.players[1]!.name).toBe("Bobby");
+
+        room.disconnect(a.socket);
+        expect(b.socket.last(MessageType.PLAYERS)!.players[0]).toEqual({ name: "alice", connected: false, host: true });
+        await Bun.sleep(testConfig.reconnectGraceMs + 30);
+        expect(b.socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "Bobby", connected: true, host: true }], you: 0 });
+    });
+
+    test("RENAME changes the player's name, keeps the seat, and needs no host rights", () => {
+        const { room, join } = lobby();
+        join("alice");
+        const b = join("bob");
+        room.handle(b.socket, { type: MessageType.RENAME, username: "Bobby" });
+        expect(b.player.name).toBe("Bobby");
+        expect(b.socket.of(MessageType.NOTIFICATION)).toHaveLength(0);
         expect(room.players.size).toBe(2);
     });
 
