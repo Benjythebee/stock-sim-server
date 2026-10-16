@@ -124,4 +124,18 @@ describe("PowerManager", () => {
         expect(socket.of(MessageType.POWER_INVENTORY)).toHaveLength(1);
         expect(socket.of(MessageType.POWER_OFFERS)).toHaveLength(1);
     });
+
+    test("a declined briefcase is gone: not selectable and not re-sent on reconnect", () => {
+        const { game } = makeGame();
+        const { player, socket } = makePlayer();
+        game.addPlayer(player);
+        game.powers.openBriefcases();
+        expect(game.powers.decline(player)).toBe(true);
+        expect(game.powers.decline(player)).toBe(false);
+        expect(game.powers.select(player, 0)).toBe(false);
+        socket.clear();
+        game.powers.sendState(player);
+        expect(socket.of(MessageType.POWER_OFFERS)).toHaveLength(0);
+        expect(game.powers.inventoryIds(player)).toEqual([]);
+    });
 });

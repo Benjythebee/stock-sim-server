@@ -38,6 +38,8 @@ describe("parseClientMessage", () => {
     test("powers", () => {
         expect(parse({ type: 81, index: 2 })).toEqual({ type: MessageType.POWER_SELECT, index: 2 });
         expect(parse({ type: 81, index: 1.5 })).toBeNull();
+        expect(parse({ type: 81, index: -1 })).toEqual({ type: MessageType.POWER_SELECT, index: -1 }); // skip
+        expect(parse({ type: 81, index: -2 })).toBeNull();
         expect(parse({ type: 82, id: "rumor-mill" })).toEqual({ type: MessageType.POWER_CONSUME, id: "rumor-mill" });
         expect(parse({ type: 82, id: 5 })).toBeNull();
     });

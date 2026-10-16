@@ -180,6 +180,57 @@ describe("Room: lifecycle", () => {
         expect(room.phase).toBe("ended");
     });
 
+    test("players who reconnect and spectators who arrive after the end still get the leaderboard", () => {
+        const { host, room, join } = lobby();
+        const a = join("alice");
+        const b = join("bob");
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { gameDuration: 1 } });
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        for (let i = 0; i < 300; i++) room.tick();
+        expect(room.phase).toBe("ended");
+        const final = a.socket.last(MessageType.GAME_CONCLUSION)!;
+        expect(final.players.map((p) => p.name).sort()).toEqual(["alice", "bob"]);
+
+        // bob refreshes: the resumed seat gets ROOM_STATE ended=true *and* the conclusion, after its portfolio.
+        room.disconnect(b.socket);
+        const again = join("bob", b.player.id);
+        const types = again.socket.received.map((m) => m.type);
+        expect(again.socket.last(MessageType.ROOM_STATE)!.ended).toBe(true);
+        expect(again.socket.of(MessageType.GAME_CONCLUSION)).toEqual([final]);
+        expect(types.indexOf(MessageType.GAME_CONCLUSION)).toBeGreaterThan(types.indexOf(MessageType.PORTFOLIO_UPDATE));
+
+        // A late spectator gets it too.
+        const spec = host.socket("r1", "watcher", { spectator: true });
+        room.spectate(spec);
+        expect(spec.of(MessageType.GAME_CONCLUSION)).toEqual([final]);
+    });
+
+    test("no conclusion is sent to anyone joining before the game has ended", () => {
+        const { host, room, join } = lobby();
+        const a = join("alice");
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.tick();
+        const late = join("bob");
+        const spec = host.socket("r1", "watcher", { spectator: true });
+        room.spectate(spec);
+        expect(late.socket.of(MessageType.GAME_CONCLUSION)).toHaveLength(0);
+        expect(spec.of(MessageType.GAME_CONCLUSION)).toHaveLength(0);
+    });
+
+    test("skipping a briefcase (POWER_SELECT -1) drops the offers so a refresh doesn't bring them back", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        room.game.powers.openBriefcases();
+        expect(room.game.powers.offersFor(a.player)).toHaveLength(3);
+        room.handle(a.socket, { type: MessageType.POWER_SELECT, index: -1 });
+        expect(room.game.powers.offersFor(a.player)).toEqual([]);
+        expect(room.game.powers.inventoryIds(a.player)).toEqual([]);
+
+        room.disconnect(a.socket);
+        const again = join("alice", a.player.id);
+        expect(again.socket.of(MessageType.POWER_OFFERS)).toHaveLength(0);
+    });
+
     test("briefcases, power use and news never pause the game", () => {
         const { room, join } = lobby();
         const a = join("alice");

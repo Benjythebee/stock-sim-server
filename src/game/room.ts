@@ -1,7 +1,7 @@
 import type { ServerConfig } from "../config";
 import type { OrderRejection } from "../engine/market";
 import { log } from "../log";
-import { MessageType, type ClientMessage, type Notification, type ServerMessage } from "../protocol/messages";
+import { MessageType, POWER_SKIP_INDEX, type ClientMessage, type Notification, type ServerMessage } from "../protocol/messages";
 import { Game, type Catalog } from "./game";
 import { Player, RateLimiter, type Connection } from "./player";
 import { applySettingsUpdate, DEFAULT_SETTINGS, type GameSettings } from "./settings";
@@ -121,6 +121,8 @@ export class Room {
         socket.send(JSON.stringify(this.contentManifest()));
         socket.send(JSON.stringify(this.roomState()));
         socket.send(this.game.depthMessageJson());
+        // Late spectators of a finished game still get the leaderboard.
+        if (this.game.result) socket.send(JSON.stringify(this.game.result));
     }
 
     /** Socket closed. Players keep their seat for the reconnect grace period. */
@@ -174,6 +176,10 @@ export class Room {
                 return;
             }
             case MessageType.POWER_SELECT:
+                if (msg.index === POWER_SKIP_INDEX) {
+                    this.game.powers.decline(player);
+                    return;
+                }
                 if (this.phase === "ended") return;
                 if (this.game.powers.select(player, msg.index)) this.scheduleFlush();
                 return;
@@ -298,6 +304,8 @@ export class Room {
         player.send({ type: MessageType.PORTFOLIO_UPDATE, id: player.id, value: player.portfolio(this.game.market.markTicks) });
         player.sendTradingState();
         this.game.powers.sendState(player);
+        // GAME_CONCLUSION is broadcast once; anyone (re)joining a finished game needs it again.
+        if (this.game.result) player.send(this.game.result);
     }
 
     private tell(player: Player, level: Notification["level"], title: string, description: string): void {

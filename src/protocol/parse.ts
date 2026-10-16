@@ -1,4 +1,4 @@
-import { MessageType, type ClientMessage } from "./messages";
+import { MessageType, POWER_SKIP_INDEX, type ClientMessage } from "./messages";
 
 /** Inbound frames larger than this are dropped without parsing. */
 export const MAX_FRAME_BYTES = 8 * 1024;
@@ -42,7 +42,7 @@ export function parseClientMessage(raw: string | Buffer): ClientMessage | null {
                 : null;
         case MessageType.POWER_SELECT: {
             const index = num(m.index);
-            return Number.isInteger(index) ? { type: MessageType.POWER_SELECT, index } : null;
+            return Number.isInteger(index) && index >= POWER_SKIP_INDEX ? { type: MessageType.POWER_SELECT, index } : null;
         }
         case MessageType.POWER_CONSUME:
             return typeof m.id === "string" && m.id.length <= 64 ? { type: MessageType.POWER_CONSUME, id: m.id } : null;

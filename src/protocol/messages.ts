@@ -71,7 +71,9 @@ export type StockActionMessage = {
 };
 export type ShockMessage = { type: MessageType.SHOCK; target: "intrinsic" | "market" };
 export type AdminSettingsMessage = { type: MessageType.ADMIN_SETTINGS; settings: Record<string, unknown> };
+/** Index into the current offers, or POWER_SKIP_INDEX (-1) to decline the whole briefcase. */
 export type PowerSelectMessage = { type: MessageType.POWER_SELECT; index: number };
+export const POWER_SKIP_INDEX = -1;
 export type PowerConsumeRequest = { type: MessageType.POWER_CONSUME; id: string };
 
 export type ClientMessage =

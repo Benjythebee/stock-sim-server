@@ -61,6 +61,8 @@ export class Game {
     step = 0;
     elapsedSeconds = 0;
     ended = false;
+    /** The final standings, frozen when the game ends (so players removed later still show). */
+    result: ConclusionMessage | null = null;
 
     private readonly playerMap = new Map<string, Player>();
     private readonly intrinsicDriftAt: number[] = [];
@@ -246,7 +248,8 @@ export class Game {
     private end(): void {
         this.ended = true;
         this.flush();
-        this.out.broadcast(this.conclusion());
+        this.result = this.conclusion();
+        this.out.broadcast(this.result);
     }
 
     /** Human takers move the guide price: bigger trades, more impact. */

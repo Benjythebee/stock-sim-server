@@ -133,6 +133,11 @@ export class PowerManager {
         return true;
     }
 
+    /** Player skipped their briefcase: the offers are gone for good (not re-sent on reconnect). */
+    decline(player: Player): boolean {
+        return this.offers.delete(player.id);
+    }
+
     /** Player used a power from their inventory. */
     consume(player: Player, powerId: string): boolean {
         const inventory = this.inventories.get(player.id);
