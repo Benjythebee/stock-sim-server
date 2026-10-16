@@ -5,7 +5,7 @@ import { defaultBotInventory } from "../bots/types";
 import { Account } from "../engine/account";
 import { Market, type OrderOutcome } from "../engine/market";
 import { toDollars, toTicks } from "../engine/money";
-import type { Fill } from "../engine/order-book";
+import type { Fill, Order } from "../engine/order-book";
 import { PriceModel } from "../engine/price-model";
 import { RingBuffer } from "../engine/ring-buffer";
 import { Rng } from "../engine/rng";
@@ -15,12 +15,14 @@ import { PowerManager } from "../powers/manager";
 import type { PowerRegistry } from "../powers/registry";
 import {
     MessageType,
+    ORDER_CANCEL_ALL,
     type ConclusionMessage,
     type Depth,
     type Notification,
     type ServerMessage,
     type StockActionMessage,
 } from "../protocol/messages";
+import { OrderJournal } from "./orders";
 import { portfolioOf, type Player } from "./player";
 import type { GameSettings } from "./settings";
 
@@ -87,6 +89,7 @@ export class Game {
             this.rng.fork(1),
         );
         this.market.onTrade = this.onTrade;
+        this.market.onCancel = this.onCancel;
         this.priceHistory.push(this.market.price);
 
         this.spawnBots(this.rng.fork(2));
@@ -107,6 +110,11 @@ export class Game {
         return this.startClock + this.elapsedSeconds * 1000;
     }
 
+    /** Game clock with step resolution (epoch ms), stamped on players' orders. */
+    get stepClock(): number {
+        return this.startClock + this.step * STEP_MS;
+    }
+
     get timeLeftMs(): number {
         return Math.max(0, (this.durationSeconds - this.elapsedSeconds) * 1000);
     }
@@ -117,6 +125,7 @@ export class Game {
 
     addPlayer(player: Player): void {
         player.account = this.market.add(new Account(player.id, toTicks(this.settings.startingCash), 0, true));
+        player.orders = new OrderJournal();
         this.playerMap.set(player.id, player);
     }
 
@@ -149,9 +158,17 @@ export class Game {
     placeOrder(player: Player, msg: StockActionMessage): OrderOutcome {
         const side = msg.action === "BUY" ? "buy" : "sell";
         const qty = Math.floor(msg.quantity);
-        return msg.orderType === "MARKET"
-            ? this.market.market(player.account, side, qty)
-            : this.market.limit(player.account, side, msg.price, qty);
+        const isMarket = msg.orderType === "MARKET";
+        const outcome = isMarket ? this.market.market(player.account, side, qty) : this.market.limit(player.account, side, msg.price, qty);
+        if (outcome.ok) player.orders.placed(side, isMarket ? null : toTicks(msg.price), qty, outcome, this.stepClock);
+        return outcome;
+    }
+
+    /** Cancel one of a player's open orders (by OrderInfo id), or all of them. Returns how many were cancelled. */
+    cancelOrder(player: Player, id: number): number {
+        if (id === ORDER_CANCEL_ALL) return this.market.cancelAll(player.account);
+        const bookId = player.orders.bookIdOf(id);
+        return bookId !== null && this.market.cancel(player.account, bookId) ? 1 : 0;
     }
 
     /** Push pending price/depth/portfolio changes to clients. Cheap when nothing changed. */
@@ -170,6 +187,10 @@ export class Game {
             if (!player.account.dirty) continue;
             player.account.dirty = false;
             player.send({ type: MessageType.PORTFOLIO_UPDATE, id: player.id, value: portfolioOf(player.account, mark) });
+        }
+        for (const player of this.playerMap.values()) {
+            const update = player.orders.takeUpdate();
+            if (update) player.send({ type: MessageType.ORDER_UPDATE, ...update });
         }
     }
 
@@ -223,6 +244,7 @@ export class Game {
         this.powers.dispose();
         this.news.dispose();
         this.market.onTrade = null;
+        this.market.onCancel = null;
         this.market.book.clear();
         this.bots.length = 0;
         this.playerMap.clear();
@@ -252,12 +274,17 @@ export class Game {
         this.out.broadcast(this.result);
     }
 
-    /** Human takers move the guide price: bigger trades, more impact. */
-    private readonly onTrade = (fill: Fill, taker: Account) => {
+    private readonly onTrade = (fill: Fill, taker: Account, maker: Account) => {
+        if (maker.isHuman) this.playerMap.get(maker.id)?.orders.filled(fill.makerOrderId, fill.price, fill.qty, fill.makerDone, this.stepClock);
+        // Human takers move the guide price: bigger trades, more impact.
         if (!taker.isHuman) return;
         const notional = toDollars(fill.price * fill.qty);
         const weight = Math.min(1, Math.max(0.05, notional / (Math.max(1000, this.settings.startingCash) * 0.05)));
         this.model.absorbTrade(toDollars(fill.price), weight);
+    };
+
+    private readonly onCancel = (order: Order, account: Account) => {
+        if (account.isHuman) this.playerMap.get(account.id)?.orders.cancelled(order.id, this.stepClock);
     };
 
     private spawnBots(rng: Rng): void {

@@ -18,6 +18,7 @@ describe("parseClientMessage", () => {
     test("ignores server-only message types sent by clients", () => {
         expect(parse({ type: MessageType.PORTFOLIO_UPDATE, value: { cash: 1e9 } })).toBeNull();
         expect(parse({ type: MessageType.IS_ADMIN })).toBeNull();
+        expect(parse({ type: MessageType.ORDER_UPDATE, orders: [], reset: true })).toBeNull();
     });
 
     test("stock action: validates and coerces", () => {
@@ -42,6 +43,16 @@ describe("parseClientMessage", () => {
         expect(parse({ type: 81, index: -2 })).toBeNull();
         expect(parse({ type: 82, id: "rumor-mill" })).toEqual({ type: MessageType.POWER_CONSUME, id: "rumor-mill" });
         expect(parse({ type: 82, id: 5 })).toBeNull();
+    });
+
+    test("order cancel: a positive id or -1 (all)", () => {
+        expect(parse({ type: 20, id: 3 })).toEqual({ type: MessageType.ORDER_CANCEL, id: 3 });
+        expect(parse({ type: 20, id: "3" })).toEqual({ type: MessageType.ORDER_CANCEL, id: 3 });
+        expect(parse({ type: 20, id: -1 })).toEqual({ type: MessageType.ORDER_CANCEL, id: -1 });
+        expect(parse({ type: 20, id: 0 })).toBeNull();
+        expect(parse({ type: 20, id: -2 })).toBeNull();
+        expect(parse({ type: 20, id: 1.5 })).toBeNull();
+        expect(parse({ type: 20 })).toBeNull();
     });
 
     test("admin", () => {

@@ -1,6 +1,7 @@
 import { Account } from "../engine/account";
 import { toDollars } from "../engine/money";
 import { MessageType, type Portfolio, type ServerMessage } from "../protocol/messages";
+import { OrderJournal } from "./orders";
 
 /** The slice of a WebSocket the game needs. Lets tests use fake sockets. */
 export interface Connection {
@@ -32,13 +33,14 @@ export class RateLimiter {
 
 /**
  * A human player. Survives disconnects (for a grace period) so a refresh resumes the same seat.
- * The `account` is replaced whenever the lobby rebuilds the game.
+ * The `account` and `orders` are replaced whenever the lobby rebuilds the game.
  */
 export class Player {
     connection: Connection | null = null;
     disconnectedAt: number | null = null;
     removalTimer: ReturnType<typeof setTimeout> | null = null;
     account: Account;
+    orders = new OrderJournal();
     rateLimitedNotified = 0;
 
     constructor(

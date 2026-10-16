@@ -175,6 +175,12 @@ export class Room {
                 this.scheduleFlush();
                 return;
             }
+            case MessageType.ORDER_CANCEL:
+                if (this.phase !== "running") return this.tell(player, "warning", "Market closed", "Orders can only be cancelled while the game is running.");
+                if (player.account.tradingDisabled) return this.tell(player, "error", "Cancel rejected", REJECTION_TEXT["trading-disabled"]);
+                if (!player.orderLimiter.take()) return;
+                if (this.game.cancelOrder(player, msg.id) > 0) this.scheduleFlush();
+                return;
             case MessageType.POWER_SELECT:
                 if (msg.index === POWER_SKIP_INDEX) {
                     this.game.powers.decline(player);
@@ -302,6 +308,9 @@ export class Room {
         // ROOM_STATE makes the UI assume starting cash, so the real portfolio must follow it.
         player.account.dirty = false;
         player.send({ type: MessageType.PORTFOLIO_UPDATE, id: player.id, value: player.portfolio(this.game.market.markTicks) });
+        player.orders.requestReset();
+        const orders = player.orders.takeUpdate();
+        if (orders) player.send({ type: MessageType.ORDER_UPDATE, ...orders });
         player.sendTradingState();
         this.game.powers.sendState(player);
         // GAME_CONCLUSION is broadcast once; anyone (re)joining a finished game needs it again.

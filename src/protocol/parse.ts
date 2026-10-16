@@ -1,4 +1,4 @@
-import { MessageType, POWER_SKIP_INDEX, type ClientMessage } from "./messages";
+import { MessageType, ORDER_CANCEL_ALL, POWER_SKIP_INDEX, type ClientMessage } from "./messages";
 
 /** Inbound frames larger than this are dropped without parsing. */
 export const MAX_FRAME_BYTES = 8 * 1024;
@@ -46,6 +46,10 @@ export function parseClientMessage(raw: string | Buffer): ClientMessage | null {
         }
         case MessageType.POWER_CONSUME:
             return typeof m.id === "string" && m.id.length <= 64 ? { type: MessageType.POWER_CONSUME, id: m.id } : null;
+        case MessageType.ORDER_CANCEL: {
+            const id = num(m.id);
+            return Number.isSafeInteger(id) && (id > 0 || id === ORDER_CANCEL_ALL) ? { type: MessageType.ORDER_CANCEL, id } : null;
+        }
         default:
             return null;
     }

@@ -29,9 +29,11 @@ describe("Room: joining", () => {
             MessageType.ROOM_STATE,
             MessageType.ORDER_BOOK_UPDATE,
             MessageType.PORTFOLIO_UPDATE,
+            MessageType.ORDER_UPDATE,
             MessageType.CLIENT_STATE,
             MessageType.POWER_INVENTORY,
         ]);
+        expect(socket.last(MessageType.ORDER_UPDATE)).toMatchObject({ orders: [], reset: true });
         expect(socket.last(MessageType.ID)!.id).toBe(`r1-${player.id}`);
         expect(socket.last(MessageType.ROOM_STATE)).toMatchObject({ paused: true, started: false, ended: false, clients: 1, roomId: "r1" });
         expect(socket.last(MessageType.PORTFOLIO_UPDATE)!.value.cash).toBe(10_000);
@@ -281,6 +283,59 @@ describe("Room: trading", () => {
         expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Order rejected", description: "Not enough cash for that order." });
         await Bun.sleep(5); // flush timer
         expect(a.socket.last(MessageType.PORTFOLIO_UPDATE)!.value).toMatchObject({ cash: 9_995, reservedCash: 5 });
+    });
+
+    test("players see their own orders and can cancel them; a reconnect gets the full list back", async () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        const b = join("bob");
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { houseLiquidity: false } });
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.handle(a.socket, buy(0.5, 10));
+        room.handle(a.socket, buy(0.4, 10));
+        await Bun.sleep(5);
+        const open = a.socket.last(MessageType.ORDER_UPDATE)!.orders;
+        expect(open.map((o) => [o.price, o.status])).toEqual([[0.5, "open"], [0.4, "open"]]);
+        expect(b.socket.of(MessageType.ORDER_UPDATE).flatMap((m) => m.orders)).toEqual([]); // private
+
+        room.handle(b.socket, { type: MessageType.ORDER_CANCEL, id: open[0]!.id }); // not bob's: no effect
+        expect(room.game.market.book.size).toBe(2);
+        room.handle(a.socket, { type: MessageType.ORDER_CANCEL, id: open[0]!.id });
+        await Bun.sleep(5);
+        expect(room.game.market.book.size).toBe(1);
+        expect(a.socket.last(MessageType.ORDER_UPDATE)!.orders).toEqual([expect.objectContaining({ id: open[0]!.id, status: "cancelled" })]);
+        expect(a.socket.last(MessageType.PORTFOLIO_UPDATE)!.value.reservedCash).toBe(4);
+
+        const again = join("alice", a.player.id).socket.last(MessageType.ORDER_UPDATE)!;
+        expect(again.reset).toBe(true);
+        expect(again.orders.map((o) => o.status)).toEqual(["open", "cancelled"]);
+    });
+
+    test("cancels are refused while paused or while trading is locked", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { houseLiquidity: false } });
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.handle(a.socket, buy(0.5, 10));
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.handle(a.socket, { type: MessageType.ORDER_CANCEL, id: -1 });
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Market closed" });
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        const release = a.player.lockTrading();
+        room.handle(a.socket, { type: MessageType.ORDER_CANCEL, id: -1 });
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Cancel rejected" });
+        expect(room.game.market.book.size).toBe(1);
+        release();
+        room.handle(a.socket, { type: MessageType.ORDER_CANCEL, id: -1 });
+        expect(room.game.market.book.size).toBe(0);
+    });
+
+    test("lobby settings changes clear everyone's order list", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        a.socket.clear();
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { bots: 2 } });
+        expect(a.socket.last(MessageType.ORDER_UPDATE)).toMatchObject({ orders: [], reset: true });
     });
 
     test("per-player rate limit drops floods", () => {

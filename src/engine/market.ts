@@ -16,6 +16,7 @@ export type OrderOutcome =
     | { ok: false; reason: OrderRejection };
 
 export type TradeListener = (fill: Fill, taker: Account, maker: Account) => void;
+export type CancelListener = (order: Order, account: Account) => void;
 
 /**
  * The exchange: an order book plus the accounts trading on it. It validates orders, reserves
@@ -41,6 +42,8 @@ export class Market {
     private publishedBookVersion = -1;
 
     onTrade: TradeListener | null = null;
+    /** Called for every cancelled resting order, whoever cancelled it (player, bot, power). */
+    onCancel: CancelListener | null = null;
 
     constructor(openingPriceDollars: number) {
         this.openingTicks = Math.max(MIN_PRICE_TICKS, toTicks(openingPriceDollars));
@@ -151,6 +154,7 @@ export class Market {
         else account.reservedShares -= cancelled.cancelledQty;
         account.openOrders.delete(orderId);
         account.dirty = true;
+        this.onCancel?.(order, account);
         return true;
     }
 

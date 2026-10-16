@@ -28,6 +28,8 @@ export enum MessageType {
     CLIENT_STATE = 16,
     ORDER_BOOK_UPDATE = 17,
     CONTENT_MANIFEST = 18,
+    ORDER_UPDATE = 19,
+    ORDER_CANCEL = 20,
 
     ADMIN_SETTINGS = 30,
 
@@ -58,6 +60,27 @@ export interface Portfolio {
     reservedShares: number;
 }
 
+/** "partial": a market order that couldn't fill completely (the rest was dropped, IOC). */
+export type OrderStatus = "open" | "filled" | "partial" | "cancelled";
+
+/** One of the player's own orders, as shown in "Current orders" (open) and "Order history" (the rest). */
+export interface OrderInfo {
+    /** Unique per player and game. */
+    id: number;
+    action: "BUY" | "SELL";
+    orderType: "LIMIT" | "MARKET";
+    /** Limit price in dollars; null for market orders. */
+    price: number | null;
+    quantity: number;
+    filled: number;
+    /** Average execution price in dollars; null until something fills. */
+    avgPrice: number | null;
+    status: OrderStatus;
+    /** Game clock (epoch ms) when the order was placed, and when it last changed. */
+    time: number;
+    updated: number;
+}
+
 // ---- client -> server --------------------------------------------------------------------
 
 export type PingMessage = { type: MessageType.PING };
@@ -75,6 +98,9 @@ export type AdminSettingsMessage = { type: MessageType.ADMIN_SETTINGS; settings:
 export type PowerSelectMessage = { type: MessageType.POWER_SELECT; index: number };
 export const POWER_SKIP_INDEX = -1;
 export type PowerConsumeRequest = { type: MessageType.POWER_CONSUME; id: string };
+/** Cancel one of your open orders by OrderInfo.id, or all of them with ORDER_CANCEL_ALL (-1). */
+export type OrderCancelRequest = { type: MessageType.ORDER_CANCEL; id: number };
+export const ORDER_CANCEL_ALL = -1;
 
 export type ClientMessage =
     | PingMessage
@@ -83,7 +109,8 @@ export type ClientMessage =
     | ShockMessage
     | AdminSettingsMessage
     | PowerSelectMessage
-    | PowerConsumeRequest;
+    | PowerConsumeRequest
+    | OrderCancelRequest;
 
 // ---- server -> client --------------------------------------------------------------------
 
@@ -125,6 +152,11 @@ export type NotificationMessage = {
 };
 export type ClientStateMessage = { type: MessageType.CLIENT_STATE; tradingDisabled: boolean };
 export type OrderBookUpdateMessage = { type: MessageType.ORDER_BOOK_UPDATE; depth: Depth };
+/**
+ * Private. The player's orders that changed, to upsert by id (status "open" = current orders).
+ * `reset: true` carries the full list (open + recent history) and replaces what the client has.
+ */
+export type OrderUpdateMessage = { type: MessageType.ORDER_UPDATE; orders: OrderInfo[]; reset: boolean };
 export type ConclusionEntry = { name: string } & Portfolio;
 export type ConclusionMessage = {
     type: MessageType.GAME_CONCLUSION;
@@ -160,6 +192,7 @@ export type ServerMessage =
     | NotificationMessage
     | ClientStateMessage
     | OrderBookUpdateMessage
+    | OrderUpdateMessage
     | ConclusionMessage
     | PowerOffersMessage
     | PowerInventoryMessage

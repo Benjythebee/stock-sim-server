@@ -73,6 +73,17 @@ describe("Market: reservations & settlement", () => {
         expect(alice.availableShares).toBe(100);
     });
 
+    test("onCancel reports every cancelled order with its owner", () => {
+        const { market, alice } = setup();
+        const seen: [number, string][] = [];
+        market.onCancel = (order, account) => seen.push([order.id, account.id]);
+        const r = market.limit(alice, "buy", 9, 1);
+        market.limit(alice, "buy", 8, 1);
+        market.cancel(alice, r.ok ? r.orderId : 0);
+        market.cancelAll(alice);
+        expect(seen).toEqual([[1, "alice"], [2, "alice"]]);
+    });
+
     test("you can't cancel someone else's order", () => {
         const { market, alice, bob } = setup();
         const r = market.limit(alice, "buy", 9, 1);

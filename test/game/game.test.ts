@@ -117,6 +117,66 @@ describe("Game", () => {
         expect(game.players()).toEqual([]);
     });
 
+    test("players' orders are tracked: open while resting, history once filled or cancelled", () => {
+        const { game } = makeGame({ houseLiquidity: false, openingPrice: 10 });
+        const alice = makePlayer("alice");
+        const bob = makePlayer("bob");
+        game.addPlayer(alice.player);
+        game.addPlayer(bob.player);
+        bob.player.account.shares = 100; // something to sell
+        game.flush();
+        expect(alice.socket.last(MessageType.ORDER_UPDATE)).toEqual({ type: MessageType.ORDER_UPDATE, orders: [], reset: true });
+
+        game.placeOrder(alice.player, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "LIMIT", quantity: 10, price: 9.5 });
+        game.placeOrder(bob.player, { type: MessageType.STOCK_ACTION, action: "SELL", orderType: "MARKET", quantity: 4, price: 0 });
+        game.flush();
+        const resting = alice.socket.last(MessageType.ORDER_UPDATE)!;
+        expect(resting.reset).toBe(false);
+        expect(resting.orders).toEqual([
+            expect.objectContaining({ action: "BUY", orderType: "LIMIT", price: 9.5, quantity: 10, filled: 4, avgPrice: 9.5, status: "open", time: game.stepClock }),
+        ]);
+        expect(bob.socket.last(MessageType.ORDER_UPDATE)!.orders).toEqual([
+            expect.objectContaining({ action: "SELL", orderType: "MARKET", price: null, filled: 4, avgPrice: 9.5, status: "filled" }),
+        ]);
+
+        expect(game.cancelOrder(alice.player, resting.orders[0]!.id)).toBe(1);
+        expect(game.cancelOrder(alice.player, resting.orders[0]!.id)).toBe(0); // already gone
+        game.flush();
+        expect(alice.socket.last(MessageType.ORDER_UPDATE)!.orders).toEqual([expect.objectContaining({ status: "cancelled", filled: 4 })]);
+        expect(alice.player.orders.openCount).toBe(0);
+        game.flush();
+        expect(alice.socket.of(MessageType.ORDER_UPDATE)).toHaveLength(3); // nothing new, nothing sent
+    });
+
+    test("ORDER_CANCEL_ALL cancels every open order; cancels by anyone else (powers, removal) are recorded too", () => {
+        const { game } = makeGame({ houseLiquidity: false, openingPrice: 10 });
+        const { player } = makePlayer();
+        game.addPlayer(player);
+        for (const price of [9, 8, 7]) game.placeOrder(player, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "LIMIT", quantity: 1, price });
+        expect(player.orders.openCount).toBe(3);
+        game.market.cancelAll(player.account, { olderThanMs: 0 }); // e.g. a power reaching into the market
+        expect(player.orders.openCount).toBe(0);
+        game.placeOrder(player, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "LIMIT", quantity: 1, price: 9 });
+        game.placeOrder(player, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "LIMIT", quantity: 1, price: 8 });
+        expect(game.cancelOrder(player, -1)).toBe(2);
+        expect(player.orders.pastOrders().map((o) => o.status)).toEqual(Array(5).fill("cancelled"));
+        expect(player.account.reservedCash).toBe(0);
+    });
+
+    test("bots trading against a player's resting order fill it in the player's history", () => {
+        const { game } = makeGame({ openingPrice: 10, seed: 3 });
+        const { player } = makePlayer();
+        game.addPlayer(player);
+        game.advance();
+        const bid = game.market.book.bestBid()! / 100;
+        game.placeOrder(player, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "LIMIT", quantity: 5, price: bid + 0.01 });
+        game.model.applyShock(-0.5); // house quotes chase the guide price down through the bid
+        runSeconds(game, 5);
+        const order = [...player.orders.openOrders(), ...player.orders.pastOrders()][0]!;
+        expect(order.filled).toBeGreaterThan(0);
+        expect(order.avgPrice).toBeCloseTo(bid + 0.01, 2);
+    });
+
     test("bot mix respects the selection and the count", () => {
         const { game } = makeGame({ bots: 7, botSelection: ["RandomBot", "MomentumBot"], houseLiquidity: false }, catalogWith());
         expect(game.bots).toHaveLength(7);
