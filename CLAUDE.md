@@ -15,7 +15,10 @@ bun test             # ~140 tests, < 2s
 bun test test/engine # one folder
 bun run simulate -- --bots 10 --minutes 5   # headless whole-game market sim (tuning bots / price model)
 bun run load -- --clients 50 --rate 50      # spawns a server and hammers it over real WebSockets
+bash deploy/deploy.sh                       # ship committed HEAD to production and restart (drops running games)
 ```
+
+**Production** is `api.tendiesbrawl.com`: a DigitalOcean droplet in syd1 behind a Cloudflare Tunnel, with no public ports except SSH. See `deploy/README.md`.
 
 `.claude/launch.json` has `server` and `ui` configs for the browser preview. The UI one runs `bun run --cwd ../stock-sim-ui dev`.
 
