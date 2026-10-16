@@ -27,6 +27,7 @@ export enum MessageType {
     NOTIFICATION = 15,
     CLIENT_STATE = 16,
     ORDER_BOOK_UPDATE = 17,
+    CONTENT_MANIFEST = 18,
 
     ADMIN_SETTINGS = 30,
 
@@ -134,6 +135,11 @@ export type ConclusionMessage = {
 export type PowerOffersMessage = { type: MessageType.POWER_OFFERS; offers: PublicPower[] };
 export type PowerInventoryMessage = { type: MessageType.POWER_INVENTORY; inventory: string[] };
 /** Only sent when settings.revealPrices is on. */
+/**
+ * Sent right after connecting: every installed power (built-ins + mods) and the server-hosted
+ * assets (mod icons, ...) the client should preload. URLs are relative to the server origin.
+ */
+export type ContentManifestMessage = { type: MessageType.CONTENT_MANIFEST; powers: PublicPower[]; assets: string[] };
 export type DebugPricesMessage = { type: MessageType.DEBUG_PRICES; intrinsicValue: number; guidePrice: number };
 
 export type ServerMessage =
@@ -155,6 +161,7 @@ export type ServerMessage =
     | ConclusionMessage
     | PowerOffersMessage
     | PowerInventoryMessage
+    | ContentManifestMessage
     | DebugPricesMessage;
 
 export type Notification = Omit<NotificationMessage, "type">;

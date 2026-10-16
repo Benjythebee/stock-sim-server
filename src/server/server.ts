@@ -24,6 +24,7 @@ export interface GameServer {
  *   GET /, /zhealth           health checks
  *   GET /api/powers.json      power catalog (UI cards)
  *   GET /api/bots.json        selectable bot strategies (admin UI)
+ *   GET /assets/powers/...    files shipped by power mods (icons)
  *   GET /ws/:roomId           WebSocket upgrade. Query: username, spectator, prevSessionData=<roomId>-<playerId>
  */
 export function createServer(config: ServerConfig, catalog: Catalog): GameServer {
@@ -44,6 +45,15 @@ export function createServer(config: ServerConfig, catalog: Catalog): GameServer
     const powersBody = catalog.powers.publicList(DEFAULT_SETTINGS.ticketName);
     const botsBody = { data: catalog.bots.enabled().map((d) => ({ id: d.id, name: d.name, description: d.description })) };
 
+    // Files shipped by mods (e.g. power icons). Only files a power explicitly references are served.
+    const assetRoutes: Record<string, () => Response> = {};
+    for (const [url, file] of catalog.powers.assets) {
+        assetRoutes[url] = () =>
+            new Response(Bun.file(file), {
+                headers: { "Cache-Control": "public, max-age=3600", "Access-Control-Allow-Origin": config.corsOrigin },
+            });
+    }
+
     const server = Bun.serve<SocketData>({
         port: config.port,
         hostname: config.hostname,
@@ -52,6 +62,7 @@ export function createServer(config: ServerConfig, catalog: Catalog): GameServer
             "/zhealth": () => json({ ok: true, rooms: rooms.rooms.size }),
             "/api/powers.json": () => json(powersBody),
             "/api/bots.json": () => json(botsBody),
+            ...assetRoutes,
             "/ws/:roomId": (req, srv) => {
                 const roomId = (req.params as { roomId: string }).roomId;
                 if (!ROOM_ID_PATTERN.test(roomId)) return new Response("Invalid room id", { status: 400 });

@@ -25,9 +25,10 @@ bun run load -- --clients 50 --rate 50      # spawns a server and hammers it ove
 src/
   index.ts              boot: load config + catalog, start server
   config.ts             env vars (PORT, HOST, CORS_ORIGIN, RECONNECT_GRACE_MS, ORDER_RATE/BURST, FLUSH_MS, POWER_MODS_DIR, BOT_MODS_DIR, LOG_LEVEL)
-  catalog.ts            loads powers + bots + news once; shared by every room
+  catalog.ts            loads powers + bots + news once (built-ins, then mods/); shared by every room
+  mod.ts                the public mod API, imported by mods as "@mod" (tsconfig path alias)
   log.ts                leveled logger. Never log unconditionally in hot paths.
-  modules.ts            loadModules(dir): auto-discovers *.ts mods (skips _*.ts and *.test.ts)
+  modules.ts            loadModules(dir): discovers `<name>.ts` and `<name>/index.ts` mods (skips _*, .*, *.test.*)
   engine/               PURE: no I/O, no timers. Unit-tested to the hilt.
     money.ts            cents/ticks <-> dollars, limits
     rng.ts              seeded mulberry32 Rng (+ fork, weightedSample)
@@ -47,7 +48,8 @@ src/
     parse.ts            validates every inbound frame into a typed ClientMessage (or null)
   server/server.ts      Bun.serve: HTTP routes + WS upgrade + dispatch to rooms
   bots/                 types.ts (defineBot, BotView), bot.ts (runtime), registry.ts, house.ts, strategies/*.ts
-  powers/               types.ts (definePower, PowerContext), manager.ts, registry.ts, defs/*.ts
+  powers/               types.ts (definePower, PowerContext), manager.ts, registry.ts (validation + icon assets), defs/*.ts
+mods/                   community/custom content: powers/<id>/index.ts (+ assets) or powers/<id>.ts, bots/... (see mods/README.md)
   news/                 types.ts (defineNews), manager.ts, catalog.ts
 test/                   mirrors src/ (+ helpers.ts with FakeSocket/FakeHost/makeGame)
 scripts/                load.ts, simulate.ts
@@ -91,12 +93,15 @@ scripts/                load.ts, simulate.ts
 - Every inbound message is validated in `protocol/parse.ts`. Unknown or server-only types are dropped. Add a case there for every new client message.
 - Notable semantics: `TOGGLE_PAUSE` server→client carries the absolute `paused` boolean. `CLIENT_STATE` is `{ tradingDisabled }`. `PORTFOLIO_UPDATE.value` has `cash`/`shares` = *available*, plus `pnl`, `reservedCash` and `reservedShares`. `ORDER_BOOK_UPDATE.depth` = `[asks, bids]` in dollars. `ADMIN_SETTINGS.marketVolatility` arrives as a percentage and is stored as a fraction. `DEBUG_PRICES` (hidden fair value + guide) is only broadcast when the lobby setting `revealPrices` is on (default off), because anyone can read it off the socket.
 - After `ROOM_STATE` the UI assumes starting cash, so a real `PORTFOLIO_UPDATE` must always follow it. `Room.sendWelcome` and `updateSettings` do this.
-- HTTP: `/api/powers.json` (PublicPower[]), `/api/bots.json` (`{data:[{id,name,description}]}`), `/zhealth`.
+- `CONTENT_MANIFEST` (18) is sent right after `ID` on every connect: all installed powers (built-ins + mods, as PublicPower) and the server-hosted asset URLs to preload. The UI uses it as its power catalog. PublicPower has `iconUrl` (server-relative, for mod-shipped icons) which wins over `iconSlug` (built-in UI icon), plus optional `iconCredit`. The UI falls back to `/powers/missing.svg` when an icon fails to load.
+- HTTP: `/api/powers.json` (PublicPower[]), `/api/bots.json` (`{data:[{id,name,description}]}`), `/assets/powers/<id>/<file>` (only files a power references; routes built at startup), `/zhealth`.
 
 ## Extending the game (the "mod" surface)
 
-- **Powers**: one file per power in `src/powers/defs/` (or any dir in `POWER_MODS_DIR`), default-exporting `definePower({...})`. They're auto-discovered and validated at startup. Use the `/add-power` skill.
-- **Bots**: one file per strategy in `src/bots/strategies/` (or `BOT_MODS_DIR`), default-exporting `defineBot({...})`. Use the `/add-bot` skill. Check behaviour with `bun run simulate -- --only YourBot`.
+- **Where**: built-ins live in `src/powers/defs/` and `src/bots/strategies/`; new/custom content goes in `mods/powers/` and `mods/bots/` (plus any `POWER_MODS_DIR` / `BOT_MODS_DIR`). Load order: built-ins, `mods/`, env dirs. Ids must be unique across all of them.
+- **Shape**: a mod is a single file or a folder with `index.ts`. Folders can ship assets: `icon: "robber-hand.svg"` resolves inside the mod folder and is served at `/assets/powers/<id>/...`; a missing or out-of-folder file degrades to the "missing" icon with a warning (it doesn't fail startup). Mods import from `"@mod"` only. Example: `mods/powers/siphon/`.
+- **Powers**: default-export `definePower({...})`. Use the `/add-power` skill.
+- **Bots**: default-export `defineBot({...})`. Use the `/add-bot` skill. Check behaviour with `bun run simulate -- --only YourBot`.
 - **News**: add a `defineNews({...})` to `src/news/catalog.ts`.
 - Hooks from mods run inside try/catch: a throwing power is logged and skipped, and a bot that throws 3 times is benched for the game.
 

@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadPowerRegistry, powerProblems, PowerRegistry, toPublicPower } from "../../src/powers/registry";
+import { log } from "../../src/log";
+import { loadPowerRegistry, MISSING_ICON, powerProblems, PowerRegistry, toPublicPower } from "../../src/powers/registry";
 import { definePower } from "../../src/powers/types";
 import { builtinCatalog } from "../helpers";
 
@@ -75,8 +76,54 @@ describe("power registry", () => {
             expect(reg.get("volatility-storm")).toBeDefined();
 
             writeFileSync(join(dir, "broken.ts"), `export default { id: "Broken" };`);
-            expect(loadPowerRegistry([dir])).rejects.toThrow(/broken\.ts/);
+            await expect(loadPowerRegistry([dir])).rejects.toThrow(/broken\.ts/);
         } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test("a folder mod can ship its own icon, served under /assets/powers/<id>/", async () => {
+        const dir = mkdtempSync(join(tmpdir(), "power-mods-"));
+        try {
+            const typesPath = join(import.meta.dir, "../../src/powers/types.ts").replaceAll("\\", "/");
+            mkdirSync(join(dir, "pickpocket", "art"), { recursive: true });
+            writeFileSync(join(dir, "pickpocket", "art", "hand icon.svg"), "<svg/>");
+            writeFileSync(
+                join(dir, "pickpocket", "index.ts"),
+                `import { definePower } from "${typesPath}";
+                 export default definePower({ id: "pickpocket", title: "P", description: "d", weight: 1, icon: "art/hand icon.svg",
+                   iconCredit: { author: "Someone" }, onActivate() {} });`,
+            );
+            const reg = await loadPowerRegistry([dir]);
+            const pub = reg.publicOf(reg.get("pickpocket")!, "X");
+            expect(pub.iconUrl).toBe("/assets/powers/pickpocket/art/hand%20icon.svg");
+            expect(pub.iconCredit).toEqual({ author: "Someone" });
+            expect(reg.assets.get(pub.iconUrl!)).toBe(join(dir, "pickpocket", "art", "hand icon.svg"));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    test("a missing or out-of-folder icon file falls back to the missing icon instead of failing", () => {
+        const dir = mkdtempSync(join(tmpdir(), "power-mods-"));
+        writeFileSync(join(tmpdir(), "outside.svg"), "<svg/>");
+        log.setLevel("silent");
+        try {
+            const reg = new PowerRegistry([
+                { definition: { ...valid, id: "gone", icon: "nope.svg" }, dir },
+                { definition: { ...valid, id: "escape", icon: "../outside.svg" }, dir },
+                { definition: { ...valid, id: "absolute", icon: join(tmpdir(), "outside.svg") }, dir },
+                { definition: { ...valid, id: "no-dir", icon: "icon.png" } },
+                { definition: { ...valid, id: "slug", icon: "stop" }, dir },
+            ]);
+            for (const id of ["gone", "escape", "absolute", "no-dir"]) {
+                expect(reg.publicOf(reg.get(id)!, "X")).toMatchObject({ iconSlug: MISSING_ICON });
+                expect(reg.publicOf(reg.get(id)!, "X").iconUrl).toBeUndefined();
+            }
+            expect(reg.publicOf(reg.get("slug")!, "X")).toMatchObject({ iconSlug: "stop" });
+            expect(reg.assets.size).toBe(0);
+        } finally {
+            log.setLevel("warn");
             rmSync(dir, { recursive: true, force: true });
         }
     });

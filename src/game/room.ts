@@ -118,6 +118,7 @@ export class Room {
     spectate(socket: RoomSocket): void {
         this.spectators.add(socket);
         socket.subscribe(this.id);
+        socket.send(JSON.stringify(this.contentManifest()));
         socket.send(JSON.stringify(this.roomState()));
         socket.send(this.game.depthMessageJson());
     }
@@ -261,6 +262,12 @@ export class Room {
         };
     }
 
+    /** Installed content (all powers incl. mods) and the assets the client should preload. */
+    contentManifest(): ServerMessage {
+        const powers = this.host.catalog.powers;
+        return { type: MessageType.CONTENT_MANIFEST, powers: powers.publicList(this.settings.ticketName), assets: [...powers.assets.keys()] };
+    }
+
     dispose(): void {
         if (this.disposed) return;
         this.disposed = true;
@@ -282,6 +289,7 @@ export class Room {
     /** Everything a (re)joining player needs, in the order the UI expects. */
     private sendWelcome(player: Player): void {
         player.send({ type: MessageType.ID, id: `${this.id}-${player.id}` });
+        player.send(this.contentManifest());
         if (player.id === this.adminId) player.send({ type: MessageType.IS_ADMIN });
         player.send(this.roomState());
         player.sendRaw(this.game.depthMessageJson());

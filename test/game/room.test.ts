@@ -24,6 +24,7 @@ describe("Room: joining", () => {
         const { socket, player } = join("alice");
         expect(socket.received.map((m) => m.type)).toEqual([
             MessageType.ID,
+            MessageType.CONTENT_MANIFEST,
             MessageType.IS_ADMIN,
             MessageType.ROOM_STATE,
             MessageType.ORDER_BOOK_UPDATE,
@@ -34,6 +35,16 @@ describe("Room: joining", () => {
         expect(socket.last(MessageType.ID)!.id).toBe(`r1-${player.id}`);
         expect(socket.last(MessageType.ROOM_STATE)).toMatchObject({ paused: true, started: false, ended: false, clients: 1, roomId: "r1" });
         expect(socket.last(MessageType.PORTFOLIO_UPDATE)!.value.cash).toBe(10_000);
+    });
+
+    test("the content manifest lists every installed power (incl. mods) and the assets to preload", () => {
+        const { join } = lobby();
+        const manifest = join("alice").socket.last(MessageType.CONTENT_MANIFEST)!;
+        const ids = manifest.powers.map((p) => p.id);
+        expect(ids).toContain("volatility-storm");
+        expect(ids).toContain("siphon");
+        expect(manifest.assets).toContain("/assets/powers/siphon/robber-hand.svg");
+        expect(manifest.powers.find((p) => p.id === "siphon")!.iconUrl).toBe("/assets/powers/siphon/robber-hand.svg");
     });
 
     test("others hear JOIN; the second player is not admin", () => {
@@ -98,6 +109,7 @@ describe("Room: joining", () => {
         const spec = host.socket("r1", "watcher", { spectator: true });
         room.spectate(spec);
         expect(spec.last(MessageType.ROOM_STATE)).toBeDefined();
+        expect(spec.last(MessageType.CONTENT_MANIFEST)).toBeDefined();
         room.handle(spec, { type: MessageType.TOGGLE_PAUSE });
         expect(room.phase).toBe("lobby");
         room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });

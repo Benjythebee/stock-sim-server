@@ -5,18 +5,21 @@ description: Add or change a briefcase power (Mario Kart-style item) in the stoc
 
 # Adding a power
 
-A power is **one file** in `src/powers/defs/<id>.ts` that default-exports `definePower({...})`. It's auto-discovered at startup and validated (a bad power stops the server with a clear error). Nothing else needs registering: `/api/powers.json`, briefcases, inventory and activation all come from the registry. Operators can also drop powers into any directory listed in `POWER_MODS_DIR`.
+New powers are **mods**: `mods/powers/<id>/index.ts` (a folder, when the power ships its own icon or other files) or `mods/powers/<id>.ts` (a single file). Each default-exports `definePower({...})` and imports only from `"@mod"`. They're auto-discovered at startup and validated (a bad power stops the server with a clear error naming the file). Nothing else needs registering: `/api/powers.json`, the `CONTENT_MANIFEST` sent to every client on connect (which preloads icons), briefcases, inventory and activation all come from the registry. Built-in powers live in `src/powers/defs/` (same format, importing `../types`). See `mods/README.md` and the example `mods/powers/siphon/`.
 
 ## 1. Template
 
 ```ts
-import { definePower } from "../types";
+// mods/powers/my-power/index.ts   (+ mods/powers/my-power/icon.svg)
+import { definePower } from "@mod";
 
 export default definePower({
-    id: "my-power",                 // kebab-case, unique; must match the file name by convention
+    id: "my-power",                 // kebab-case, unique across built-ins and mods; match the folder name
     title: "My Power",              // or ({ ticker }) => `...$${ticker}...`
     description: "What the card says.",
-    icon: "default",                // ../stock-sim-ui/public/powers/<icon>.svg (default, present, stop, talk, volatility-storm)
+    icon: "icon.svg",               // a file in the mod folder (svg/png/webp/jpg/gif, subfolders ok), served by the server,
+                                    // OR a built-in UI icon name: default, present, stop, talk, volatility-storm
+    iconCredit: { author: "...", url: "...", license: "CC BY 3.0" }, // required for CC-BY packs like game-icons.net
     type: "market",                 // "client" | "others" | "all" | "market" (UI styling only)
     instant: false,                 // true = fires on pick; false = goes to inventory, used later
     weight: 10,                     // briefcase odds; HIGHER = MORE COMMON; 0 = never offered
@@ -29,7 +32,7 @@ export default definePower({
 });
 ```
 
-Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip 15, storm 5.
+Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip 15, siphon 15, storm 5.
 
 ## 2. What `ctx` gives you (src/powers/types.ts)
 
@@ -57,7 +60,7 @@ Current weights, for balancing: heritage/homeless/ddos 40, rumor 20, insider-tip
 
 ## 4. Test it
 
-Add cases to `test/powers/builtins.test.ts` (built-ins) using the `arena()` helper pattern there. It activates the power directly (`game.powers.activate(def, player)`), advances game time with `runSeconds(game, n)`, and asserts on accounts, model and received messages (`socket.last(MessageType.NOTIFICATION)`). For a duration power, always assert that the effect is fully undone after `durationSeconds`, including when two activations overlap.
+Add a test file: `test/mods/<id>.test.ts` for mods (see `test/mods/siphon.test.ts`), or cases in `test/powers/builtins.test.ts` for built-ins. `builtinCatalog` in `test/helpers.ts` already includes `mods/`. It activates the power directly (`game.powers.activate(def, player)`), advances game time with `runSeconds(game, n)`, and asserts on accounts, model and received messages (`socket.last(MessageType.NOTIFICATION)`). For a duration power, always assert that the effect is fully undone after `durationSeconds`, including when two activations overlap.
 
 ```bash
 bun run check
@@ -65,5 +68,4 @@ bun run check
 
 ## 5. UI side (`../stock-sim-ui`)
 
-- A new icon needs `public/powers/<icon>.svg` (game-icons.net) plus an attribution entry in `src/components/PowerCards/card.icons.ts`.
-- Otherwise nothing changes: the UI reads `/api/powers.json` and `POWER_OFFERS`. If the power needs new client behaviour (a new message), use `/add-message-type`.
+Nothing to do for a mod: icons shipped in the mod folder are served by the game server and preloaded by every client on connect. A missing or broken icon shows the "missing" icon automatically. Only a *new built-in* icon name (no file) needs `public/powers/<name>.svg` in the UI plus attribution in `src/components/PowerCards/card.icons.ts`. If the power needs new client behaviour (a new message), use `/add-message-type`.

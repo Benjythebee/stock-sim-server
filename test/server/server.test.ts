@@ -60,6 +60,13 @@ describe("HTTP", () => {
         expect(bots.data.map((b: any) => b.id)).toContain("LiquidityBot");
         expect(bots.data.map((b: any) => b.id)).not.toContain("HouseMarketMaker");
 
+        const icon = await fetch(`http://${base}/assets/powers/siphon/robber-hand.svg`);
+        expect(icon.status).toBe(200);
+        expect(icon.headers.get("content-type")).toContain("image/svg+xml");
+        expect(await icon.text()).toStartWith("<svg");
+        expect((await fetch(`http://${base}/assets/powers/siphon/index.ts`)).status).toBe(404); // only referenced files are served
+        expect((await fetch(`http://${base}/assets/powers/siphon/../../../package.json`)).status).toBe(404);
+
         expect((await fetch(`http://${base}/nope`)).status).toBe(404);
         expect((await fetch(`http://${base}/ws/bad%20room`)).status).toBe(400);
     });

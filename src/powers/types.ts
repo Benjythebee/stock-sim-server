@@ -21,8 +21,15 @@ export interface PowerDefinition<S extends object = Record<string, never>> {
     id: string;
     title: PowerText;
     description: PowerText;
-    /** Icon file in the UI: ../stock-sim-ui/public/powers/<icon>.svg. Defaults to "default". */
+    /**
+     * Either an image shipped with the mod, as a path relative to the mod's folder
+     * (`"robber-hand.svg"`, `"assets/icon.png"`; svg/png/webp/jpg/gif), served by the game server,
+     * or the name of an icon built into the UI (`"stop"` → ../stock-sim-ui/public/powers/stop.svg).
+     * Defaults to "default". A file that can't be found falls back to the "missing" icon.
+     */
     icon?: string;
+    /** Credit for the icon's author, shown by the UI (required by CC-BY icons such as game-icons.net). */
+    iconCredit?: IconCredit;
     /** Defaults to "market". */
     type?: PowerTarget;
     /** true: fires the moment it's picked. false (default): goes to the inventory until used. */
@@ -72,13 +79,23 @@ export interface PowerContext<S> {
     publishNews(news: NewsDefinition): void;
 }
 
-/** Wire format, as served by /api/powers.json and POWER_OFFERS. Field names are the UI's. */
+export interface IconCredit {
+    author: string;
+    url?: string;
+    license?: string;
+}
+
+/** Wire format, as served by /api/powers.json, CONTENT_MANIFEST and POWER_OFFERS. Field names are the UI's. */
 export interface PublicPower {
     id: string;
     title: string;
     description: string;
     type: PowerTarget;
+    /** Built-in UI icon name (used when `iconUrl` is absent). "missing" when a mod's image wasn't found. */
     iconSlug: string;
+    /** Server-relative URL of the mod's own icon, e.g. "/assets/powers/siphon/robber-hand.svg". */
+    iconUrl?: string;
+    iconCredit?: IconCredit;
     isInstant: boolean;
     /** Same as `weight`: lower = rarer. */
     rarity: number;

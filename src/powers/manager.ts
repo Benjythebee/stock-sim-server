@@ -5,7 +5,7 @@ import type { Player } from "../game/player";
 import { log } from "../log";
 import type { NewsDefinition } from "../news/types";
 import { MessageType, type Notification } from "../protocol/messages";
-import { toPublicPower, type PowerRegistry } from "./registry";
+import type { PowerRegistry } from "./registry";
 import type { AnyPowerDefinition, PowerContext, PublicPower } from "./types";
 
 /** Offers per briefcase. */
@@ -148,7 +148,7 @@ export class PowerManager {
     activate(def: AnyPowerDefinition, player: Player): void {
         const activation = new Activation(
             def,
-            toPublicPower(def, this.game.settings.ticketName),
+            this.registry.publicOf(def, this.game.settings.ticketName),
             player,
             this.game,
             this.rng.fork(this.game.step),
@@ -163,7 +163,7 @@ export class PowerManager {
     }
 
     offersFor(player: Player): PublicPower[] {
-        return (this.offers.get(player.id) ?? []).map((d) => toPublicPower(d, this.game.settings.ticketName));
+        return (this.offers.get(player.id) ?? []).map((d) => this.registry.publicOf(d, this.game.settings.ticketName));
     }
 
     /** Re-send inventory and pending offers (after a reconnect). */

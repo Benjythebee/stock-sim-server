@@ -45,7 +45,7 @@ export const BUILTIN_STRATEGIES_DIR = join(import.meta.dir, "strategies");
 export async function loadBotRegistry(extraDirs: string[] = []): Promise<BotRegistry> {
     const defs: BotDefinition[] = [];
     for (const dir of [BUILTIN_STRATEGIES_DIR, ...extraDirs]) {
-        defs.push(...(await loadModules(dir, validateBotDefinition)));
+        defs.push(...(await loadModules(dir, (value, source) => validateBotDefinition(value, source.path))));
     }
     return new BotRegistry(defs);
 }

@@ -9,7 +9,7 @@ Frontend: [stock-sim-ui](https://github.com/Benjythebee/stock-sim-ui)
 - 🏢 **Rooms**: any number of rooms per server, with lobby settings (starting cash, opening price, volatility, duration, bots, ticker, news)
 - 📈 **Real exchange**: price-time-priority matching engine with limit and market orders, cash/share reservations and exact integer-cent accounting
 - 🤖 **Bots**: liquidity providers, momentum, mean reversion, informed, partially informed, random and spread traders, plus an always-on house market maker
-- 🎁 **Powers as mods**: drop a file in `src/powers/defs/` (or a `POWER_MODS_DIR`) and it shows up in briefcases
+- 🎁 **Powers as mods**: drop a file or folder (with its own icon) in `mods/powers/` and it shows up in briefcases; clients preload new content on connect
 - 📰 **News** that moves the stock's fair value
 - 🔁 **Reconnects**: refresh the page and you keep your seat, cash and shares
 - 🎲 **Deterministic**: the same seed and the same inputs give the same game
@@ -51,33 +51,42 @@ bun run dev        # http://localhost:3000, WebSocket at ws://localhost:3000/ws/
 - `GET /zhealth`: `{ ok, rooms }`
 - `GET /api/powers.json`: the power catalog
 - `GET /api/bots.json`: selectable bot strategies
+- `GET /assets/powers/<id>/<file>`: files shipped by power mods (icons)
 - `WS /ws/:roomId?username=…[&spectator][&prevSessionData=<id from the ID message>]`
 
 The message protocol (numeric `type` + fields) is documented in [`src/protocol/messages.ts`](src/protocol/messages.ts).
 
-## Writing a power
+## Writing a power (mods)
+
+Custom content lives in [`mods/`](mods/README.md). A power is a folder (or a single file) that can ship its own icon:
+
+```
+mods/powers/siphon/
+  index.ts          export default definePower({ ... icon: "robber-hand.svg" })
+  robber-hand.svg   served at /assets/powers/siphon/robber-hand.svg
+```
 
 ```ts
-// src/powers/defs/margin-call.ts
-import { definePower } from "../types";
+// mods/powers/siphon/index.ts (abridged)
+import { definePower, type Player } from "@mod";
 
 export default definePower({
-    id: "margin-call",
-    title: "Margin Call",
-    description: "Freeze everyone else's trading for 10 seconds.",
-    icon: "stop",
+    id: "siphon",
+    title: "Siphon",
+    description: "Drains money from another player.",
+    icon: "robber-hand.svg",
+    iconCredit: { author: "Lorc", url: "https://game-icons.net/1x1/lorc/robber-hand.html", license: "CC BY 3.0" },
     type: "others",
-    weight: 10, // higher = more common in briefcases
+    weight: 15, // higher = more common in briefcases
     durationSeconds: 10,
-    state: () => ({ releases: [] as (() => void)[] }),
-    onActivate: (ctx) => {
-        ctx.state.releases = ctx.others.map((p) => p.lockTrading());
-    },
-    onExpire: (ctx) => ctx.state.releases.forEach((release) => release()),
+    state: () => ({ victim: null as Player | null, total: 0 }),
+    onActivate: (ctx) => { /* pick the richest rival */ },
+    onTick: (ctx) => { /* move 2% of their available cash to ctx.player */ },
+    onExpire: (ctx) => { /* report the haul */ },
 });
 ```
 
-Restart the server and it's in the game. See [`.claude/skills/add-power/SKILL.md`](.claude/skills/add-power/SKILL.md) for the full API. Bots work the same way ([`add-bot`](.claude/skills/add-bot/SKILL.md)).
+Restart the server and it's in the game. Clients receive the installed content when they connect and preload the icons; a missing icon shows a placeholder. See [`.claude/skills/add-power/SKILL.md`](.claude/skills/add-power/SKILL.md) for the full API. Bots work the same way ([`add-bot`](.claude/skills/add-bot/SKILL.md)).
 
 ## Architecture
 

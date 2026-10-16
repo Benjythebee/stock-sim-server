@@ -5,11 +5,10 @@ description: Add or tune an AI trading bot strategy for the stock-sim market. Us
 
 # Adding a bot strategy
 
-A strategy is **one file** in `src/bots/strategies/<name>.ts` that default-exports `defineBot({...})`. It's auto-discovered. Its `id` is what the admin UI stores in `settings.botSelection` and what `/api/bots.json` lists. Operators can add more through `BOT_MODS_DIR`.
+A strategy is a mod: `mods/bots/<name>.ts` (or a `mods/bots/<name>/index.ts` folder) that default-exports `defineBot({...})` and imports from `"@mod"`. Built-ins live in `src/bots/strategies/` (importing `../types` / `../helpers`). It's auto-discovered. Its `id` is what the admin UI stores in `settings.botSelection` and what `/api/bots.json` lists. Operators can add more through `BOT_MODS_DIR`.
 
 ```ts
-import { ceilCents, floorCents } from "../helpers";
-import { defineBot, sharesWorth } from "../types";
+import { ceilCents, defineBot, floorCents, sharesWorth } from "@mod";
 
 export default defineBot({
     id: "MyBot",                       // identifier-like, stable (saved in settings)
