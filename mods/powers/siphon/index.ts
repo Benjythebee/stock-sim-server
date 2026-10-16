@@ -12,7 +12,7 @@ export default definePower({
     title: "Siphon",
     description: "Drains money from another player.",
     icon: "robber-hand.svg",
-    iconCredit: { author: "Lorc", url: "https://game-icons.net/1x1/lorc/robber-hand.html", license: "CC BY 3.0" },
+    iconCredit: { author: "DarkZaitzev", url: "https://game-icons.net/1x1/darkzaitzev/robber-hand.html", license: "CC BY 3.0" },
     type: "others",
     weight: 15,
     durationSeconds: 10,
