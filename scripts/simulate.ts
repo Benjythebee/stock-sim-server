@@ -32,6 +32,7 @@ const settings = applySettingsUpdate(
         botSelection: args.get("only")?.split(","),
     },
     catalog.bots.enabledIds(),
+    catalog.powers.ids(),
 );
 
 const counts = new Map<string, number>();

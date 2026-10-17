@@ -87,6 +87,7 @@ scripts/                load.ts, simulate.ts
 
 ### Rooms (game/room.ts)
 
+- `settings.enablePowers` (default on) and `settings.disabledPowers` (a blocklist of power ids, sanitized against the registry, so new mod powers start on): `PowerManager` schedules no briefcases when powers are off or every offerable power is disabled, and `registry.offerable(disabled)` leaves the disabled ones out of the draw.
 - Phases: `lobby` → `running` ⇄ `paused` → `ended` → (host `RESET_GAME`) `lobby`. Settings are editable **only in the lobby**; each update rebuilds the Game (fresh accounts for everyone). `RESET_GAME` (31, host only, only once ended) rebuilds with the same settings and a new seed, so the rematch plays out differently.
 - The first player is admin. Admin passes to the next player when the admin is *removed* (after the reconnect grace period, default 60s), not on a brief disconnect.
 - Reconnect: the `ID` message carries `<roomId>-<resumeToken>`. `Player.resumeToken` is a random UUID, separate from `player.id`, sent only to that player; the UI sends it back as `?prevSessionData=` and `Room.join` finds the seat by token (never by id). Don't make `player.id` a resume key again, and keep the token out of every broadcast. `JOIN`/`LEAVE` carry no player id either. A newer socket for the same player **detaches the old one without closing it**. Closing it makes the UI reconnect in a loop.

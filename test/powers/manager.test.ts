@@ -47,6 +47,27 @@ describe("PowerManager", () => {
         expect(offers[0]).toHaveProperty("iconSlug");
     });
 
+    test("disabled powers are never offered", () => {
+        const { game } = makeGame({ disabledPowers: ["lifecycle"] }, catalogWith({ bots: noBots, powers: [lifecyclePower([]), { ...lifecyclePower([]), id: "other" }] }));
+        const { player, socket } = makePlayer();
+        game.addPlayer(player);
+        for (let i = 0; i < 20; i++) game.powers.openBriefcases();
+        const offered = socket.of(MessageType.POWER_OFFERS).flatMap((m) => m.offers.map((o) => o.id));
+        expect(offered.length).toBeGreaterThan(0);
+        expect(new Set(offered)).toEqual(new Set(["other"]));
+    });
+
+    test("no briefcases when powers are off, or every power is disabled", () => {
+        for (const settings of [{ enablePowers: false }, { disabledPowers: ["lifecycle"] }]) {
+            const { game } = makeGame({ gameDuration: 1, ...settings }, catalogWith({ bots: noBots, powers: [lifecyclePower([])] }));
+            const { player, socket } = makePlayer();
+            game.addPlayer(player);
+            expect(game.powers.upcomingBriefcases).toEqual([]);
+            runSeconds(game, 60);
+            expect(socket.of(MessageType.POWER_OFFERS)).toHaveLength(0);
+        }
+    });
+
     test("non-instant pick goes to the inventory exactly once; consuming removes it", () => {
         const log: string[] = [];
         const { game } = makeGame({}, catalogWith({ bots: noBots, powers: [lifecyclePower(log)] }));

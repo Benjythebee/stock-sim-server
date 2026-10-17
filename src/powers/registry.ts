@@ -92,9 +92,13 @@ export class PowerRegistry {
         return [...this.byId.values()];
     }
 
-    /** Powers that can appear in briefcases. */
-    offerable(): AnyPowerDefinition[] {
-        return this.all().filter((d) => d.weight > 0);
+    ids(): string[] {
+        return [...this.byId.keys()];
+    }
+
+    /** Powers that can appear in briefcases, minus the ids a room switched off. */
+    offerable(disabled: readonly string[] = []): AnyPowerDefinition[] {
+        return this.all().filter((d) => d.weight > 0 && !disabled.includes(d.id));
     }
 
     publicOf(def: AnyPowerDefinition, ticker: string): PublicPower {

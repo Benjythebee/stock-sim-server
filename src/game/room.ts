@@ -239,7 +239,7 @@ export class Room {
 
     updateSettings(admin: Player, update: Record<string, unknown>): void {
         if (this.phase !== "lobby") return this.tell(admin, "error", "Game in progress", "Settings can only be changed before the game starts.");
-        this.settings = applySettingsUpdate(this.settings, update, this.host.catalog.bots.enabledIds());
+        this.settings = applySettingsUpdate(this.settings, update, this.host.catalog.bots.enabledIds(), this.host.catalog.powers.ids());
         this.rebuild();
     }
 

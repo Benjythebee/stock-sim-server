@@ -103,7 +103,9 @@ export class PowerManager {
         private readonly registry: PowerRegistry,
         private readonly rng: Rng,
     ) {
-        this.schedule = briefcaseSchedule(game.durationSeconds);
+        // No briefcases at all when the room turned powers off, or switched every one of them off.
+        const any = game.settings.enablePowers && registry.offerable(game.settings.disabledPowers).length > 0;
+        this.schedule = any ? briefcaseSchedule(game.durationSeconds) : [];
     }
 
     get activeCount(): number {
@@ -139,7 +141,7 @@ export class PowerManager {
     }
 
     openBriefcases(): void {
-        const pool = this.registry.offerable();
+        const pool = this.registry.offerable(this.game.settings.disabledPowers);
         for (const player of this.game.players()) {
             const picks = weightedSample(this.rng, pool, (d) => d.weight, OFFERS_PER_BRIEFCASE);
             if (picks.length === 0) continue;

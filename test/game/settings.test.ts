@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { applySettingsUpdate, DEFAULT_SETTINGS } from "../../src/game/settings";
 
-const apply = (update: Record<string, unknown>) => applySettingsUpdate(DEFAULT_SETTINGS, update, ["MomentumBot", "RandomBot"]);
+const apply = (update: Record<string, unknown>) => applySettingsUpdate(DEFAULT_SETTINGS, update, ["MomentumBot", "RandomBot"], ["free-cash", "ddos"]);
 
 describe("applySettingsUpdate", () => {
     test("returns a copy and ignores unknown keys", () => {
@@ -43,6 +43,9 @@ describe("applySettingsUpdate", () => {
         expect(DEFAULT_SETTINGS.disableRandomWalk).toBe(false);
         expect(apply({ disableRandomWalk: true }).disableRandomWalk).toBe(true);
         expect(apply({ disableRandomWalk: 1 }).disableRandomWalk).toBe(false);
+        expect(DEFAULT_SETTINGS.enablePowers).toBe(true);
+        expect(apply({ enablePowers: false }).enablePowers).toBe(false);
+        expect(apply({ enablePowers: 0 }).enablePowers).toBe(true);
     });
 
     test("ticker is sanitized", () => {
@@ -54,5 +57,11 @@ describe("applySettingsUpdate", () => {
     test("bot selection keeps only known, unique ids", () => {
         expect(apply({ botSelection: ["RandomBot", "Nope", 5, "RandomBot"] }).botSelection).toEqual(["RandomBot"]);
         expect(apply({ botSelection: "RandomBot" }).botSelection).toBeUndefined();
+    });
+
+    test("disabled powers keep only known, unique ids", () => {
+        expect(DEFAULT_SETTINGS.disabledPowers).toEqual([]);
+        expect(apply({ disabledPowers: ["ddos", "nope", 3, "ddos"] }).disabledPowers).toEqual(["ddos"]);
+        expect(apply({ disabledPowers: "ddos" }).disabledPowers).toEqual([]);
     });
 });

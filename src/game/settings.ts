@@ -30,6 +30,13 @@ export interface GameSettings {
      * price only moves on news, powers, trades and mean reversion. Volatility Storm still adds noise.
      */
     disableRandomWalk: boolean;
+    /** Briefcases drop during the game. Off = no briefcases at all (a pure trading game). */
+    enablePowers: boolean;
+    /**
+     * Power ids briefcases never offer. A blocklist rather than a pick list, so a power a mod adds
+     * later is on by default. Unknown ids are dropped by the sanitizer.
+     */
+    disabledPowers: string[];
 }
 
 /** What clients see (identical today, kept as its own name so the two can diverge). */
@@ -48,6 +55,8 @@ export const DEFAULT_SETTINGS: Readonly<GameSettings> = Object.freeze({
     revealPrices: false,
     disableLimitOrders: false,
     disableRandomWalk: false,
+    enablePowers: true,
+    disabledPowers: [],
 });
 
 export const LIMITS = {
@@ -74,6 +83,7 @@ export function applySettingsUpdate(
     current: GameSettings,
     update: Record<string, unknown>,
     knownBotIds: readonly string[],
+    knownPowerIds: readonly string[],
 ): GameSettings {
     const next: GameSettings = { ...current };
 
@@ -100,6 +110,7 @@ export function applySettingsUpdate(
     if (typeof update.revealPrices === "boolean") next.revealPrices = update.revealPrices;
     if (typeof update.disableLimitOrders === "boolean") next.disableLimitOrders = update.disableLimitOrders;
     if (typeof update.disableRandomWalk === "boolean") next.disableRandomWalk = update.disableRandomWalk;
+    if (typeof update.enablePowers === "boolean") next.enablePowers = update.enablePowers;
 
     if (typeof update.ticketName === "string") {
         const ticker = update.ticketName.replace(/[^A-Za-z0-9.]/g, "").toUpperCase().slice(0, LIMITS.tickerLength);
@@ -109,6 +120,11 @@ export function applySettingsUpdate(
     if (Array.isArray(update.botSelection)) {
         const known = new Set(knownBotIds);
         next.botSelection = [...new Set(update.botSelection.filter((id): id is string => typeof id === "string" && known.has(id)))];
+    }
+
+    if (Array.isArray(update.disabledPowers)) {
+        const known = new Set(knownPowerIds);
+        next.disabledPowers = [...new Set(update.disabledPowers.filter((id): id is string => typeof id === "string" && known.has(id)))];
     }
 
     return next;
