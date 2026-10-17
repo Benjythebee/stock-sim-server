@@ -99,6 +99,8 @@ export class Game {
         this.startClock = now;
         this.rng = new Rng(settings.seed);
         this.market = new Market(settings.openingPrice);
+        // Without the random walk the visible price only moves when a trade prints.
+        this.market.markToQuotes = !settings.disableRandomWalk;
         this.model = new PriceModel(
             {
                 initialPrice: settings.openingPrice,

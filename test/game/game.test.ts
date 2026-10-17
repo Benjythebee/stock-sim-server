@@ -38,6 +38,34 @@ describe("Game", () => {
         expect(drifting.game.model.intrinsic).not.toBe(before);
     });
 
+    test("disableRandomWalk: the visible price stays flat until a trade prints", () => {
+        const { game, broadcasts } = makeGame({ openingPrice: 10, disableRandomWalk: true });
+        game.model.shockIntrinsic(0.3); // the hidden fair value jumps, and the house re-quotes up to it
+        runSeconds(game, 30);
+        expect(game.model.guide).toBeGreaterThan(12);
+        expect(game.market.book.bestBid()).toBeGreaterThan(1100);
+        expect(game.market.price).toBe(10);
+        // Only the opening price, published once by the first flush.
+        expect(ofType(broadcasts, MessageType.STOCK_MOVEMENT).map((m) => m.price)).toEqual([10]);
+
+        const { player } = makePlayer();
+        game.addPlayer(player);
+        game.placeOrder(player, { type: MessageType.STOCK_ACTION, action: "BUY", orderType: "MARKET", quantity: 1, price: 0 });
+        game.flush();
+        const moves = ofType(broadcasts, MessageType.STOCK_MOVEMENT);
+        expect(moves).toHaveLength(2);
+        expect(moves[1]!.price).toBeGreaterThan(12);
+    });
+
+    test("with the random walk on, the price follows the quotes without trades", () => {
+        const { game, broadcasts } = makeGame({ openingPrice: 10 });
+        game.model.shockIntrinsic(0.3);
+        runSeconds(game, 30);
+        expect(game.market.tradeCount).toBe(0);
+        expect(game.market.price).toBeGreaterThan(11);
+        expect(ofType(broadcasts, MessageType.STOCK_MOVEMENT).length).toBeGreaterThan(1);
+    });
+
     test("ends after gameDuration with a conclusion, and stops advancing", () => {
         const { game, broadcasts } = makeGame({ gameDuration: 1 });
         const { player } = makePlayer();

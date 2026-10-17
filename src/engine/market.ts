@@ -41,6 +41,12 @@ export class Market {
     private publishedMark = -1;
     private publishedBookVersion = -1;
 
+    /**
+     * True: the mark follows the live quotes between trades (see `markTicks`). False: the mark is
+     * the last trade only, so the price stays flat until someone actually trades.
+     */
+    markToQuotes = true;
+
     onTrade: TradeListener | null = null;
     /** Called for every cancelled resting order, whoever cancelled it (player, bot, power). */
     onCancel: CancelListener | null = null;
@@ -68,9 +74,11 @@ export class Market {
     /**
      * Mark price in ticks: the last trade, clamped inside the current best bid/ask. When nobody
      * trades for a while it still follows the live quotes, so the chart and P&L never go stale.
+     * With `markToQuotes` off it's just the last trade.
      */
     get markTicks(): number {
         let mark = this.lastTradeTicks;
+        if (!this.markToQuotes) return mark;
         const bid = this.book.bestBid();
         const ask = this.book.bestAsk();
         if (bid !== null && mark < bid) mark = bid;

@@ -225,6 +225,19 @@ describe("Market: price", () => {
         expect(market.price).toBe(8); // opening $10 > best ask $8
     });
 
+    test("markToQuotes off: the mark is the last trade, whatever the quotes do", () => {
+        const { market, alice, bob } = setup();
+        market.markToQuotes = false;
+        market.markPricePublished();
+        market.limit(bob, "sell", 12, 2);
+        market.limit(alice, "buy", 11, 1);
+        expect(market.price).toBe(10); // no trade yet: still the opening price
+        expect(market.priceDirty).toBe(false);
+        market.market(alice, "buy", 1);
+        expect(market.price).toBe(12);
+        expect(market.priceDirty).toBe(true);
+    });
+
     test("priceDirty / bookDirty track what has been published", () => {
         const { market, alice } = setup();
         market.markPricePublished();
