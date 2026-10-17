@@ -63,6 +63,13 @@ describe("parseClientMessage", () => {
         expect(parse({ type: 21 })).toBeNull();
     });
 
+    test("bank loans: borrow has no fields, repay takes all (default) or half", () => {
+        expect(parse({ type: 23, amount: 1e9 })).toEqual({ type: MessageType.LOAN_BORROW });
+        expect(parse({ type: 24 })).toEqual({ type: MessageType.LOAN_REPAY, portion: "all" });
+        expect(parse({ type: 24, portion: "half" })).toEqual({ type: MessageType.LOAN_REPAY, portion: "half" });
+        expect(parse({ type: 24, portion: 0.5 })).toBeNull();
+    });
+
     test("admin", () => {
         expect(parse({ type: 3 })).toEqual({ type: MessageType.TOGGLE_PAUSE });
         expect(parse({ type: 13, target: "market" })).toEqual({ type: MessageType.SHOCK, target: "market" });

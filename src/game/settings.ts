@@ -37,6 +37,15 @@ export interface GameSettings {
      * later is on by default. Unknown ids are dropped by the sanitizer.
      */
     disabledPowers: string[];
+    /** Players can take a bank loan (one at a time) and repay it whenever they like. */
+    enableBorrowing: boolean;
+    /** Dollars lent per loan. */
+    loanAmount: number;
+    /**
+     * Interest, in percent of the loan, owed by someone who keeps it to the end of the game. It
+     * accrues linearly from the moment it's taken, so repaying early costs only a part of it.
+     */
+    loanInterestPercent: number;
 }
 
 /** What clients see (identical today, kept as its own name so the two can diverge). */
@@ -57,6 +66,9 @@ export const DEFAULT_SETTINGS: Readonly<GameSettings> = Object.freeze({
     disableRandomWalk: false,
     enablePowers: true,
     disabledPowers: [],
+    enableBorrowing: true,
+    loanAmount: 5_000,
+    loanInterestPercent: 10,
 });
 
 export const LIMITS = {
@@ -65,6 +77,8 @@ export const LIMITS = {
     marketVolatilityPercent: [0.01, 50],
     gameDuration: [1, 60],
     bots: [0, 50],
+    loanAmount: [1, 999_999_999],
+    loanInterestPercent: [0, 1_000],
     tickerLength: 8,
 } as const;
 
@@ -111,6 +125,13 @@ export function applySettingsUpdate(
     if (typeof update.disableLimitOrders === "boolean") next.disableLimitOrders = update.disableLimitOrders;
     if (typeof update.disableRandomWalk === "boolean") next.disableRandomWalk = update.disableRandomWalk;
     if (typeof update.enablePowers === "boolean") next.enablePowers = update.enablePowers;
+    if (typeof update.enableBorrowing === "boolean") next.enableBorrowing = update.enableBorrowing;
+
+    const loanAmount = finite(update.loanAmount);
+    if (loanAmount !== undefined) next.loanAmount = Math.round(clamp(loanAmount, LIMITS.loanAmount) * 100) / 100;
+
+    const loanInterest = finite(update.loanInterestPercent);
+    if (loanInterest !== undefined) next.loanInterestPercent = Math.round(clamp(loanInterest, LIMITS.loanInterestPercent) * 100) / 100;
 
     if (typeof update.ticketName === "string") {
         const ticker = update.ticketName.replace(/[^A-Za-z0-9.]/g, "").toUpperCase().slice(0, LIMITS.tickerLength);

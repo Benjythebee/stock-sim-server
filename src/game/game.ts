@@ -23,6 +23,7 @@ import {
     type StockActionMessage,
 } from "../protocol/messages";
 import { log } from "../log";
+import { Bank } from "./bank";
 import { OrderJournal } from "./orders";
 import { portfolioOf, type Player } from "./player";
 import type { GameSettings } from "./settings";
@@ -71,6 +72,7 @@ export class Game {
     readonly bots: Bot[] = [];
     readonly powers: PowerManager;
     readonly news: NewsManager;
+    readonly bank: Bank;
     /** Traded price sampled once per step (what non-informed bots look at). */
     readonly priceHistory = new RingBuffer(512);
     readonly startClock: number;
@@ -118,6 +120,7 @@ export class Game {
         this.spawnBots(this.rng.fork(2));
         this.powers = new PowerManager(this, catalog.powers, this.rng.fork(3));
         this.news = new NewsManager(this, catalog.news, this.rng.fork(4), settings.enableRandomNews);
+        this.bank = new Bank(this);
 
         // Slow fundamental drift: ~10 nudges of ±5% over the game.
         const interval = Math.max(8, (this.durationSeconds - 8) / 10);
@@ -128,6 +131,11 @@ export class Game {
 
     get durationSeconds(): number {
         return Math.round(this.settings.gameDuration * 60);
+    }
+
+    /** The step the game ends on. */
+    get durationSteps(): number {
+        return this.durationSeconds * STEPS_PER_SECOND;
     }
 
     /** Game clock as epoch ms (what the UI plots candles against). */
@@ -349,12 +357,14 @@ export class Game {
         }
         this.news.onSecond(this.elapsedSeconds);
         this.powers.onSecond(this.elapsedSeconds);
+        this.bank.accrue(this.playerMap.values());
 
         if (this.elapsedSeconds >= this.durationSeconds) this.end();
     }
 
     private end(): void {
         this.ended = true;
+        this.bank.collectAll(this.playerMap.values());
         this.flush();
         this.result = this.conclusion();
         this.out.broadcast(this.result);

@@ -33,6 +33,8 @@ export enum MessageType {
     ORDER_CANCEL = 20,
     RENAME = 21,
     PLAYERS = 22,
+    LOAN_BORROW = 23,
+    LOAN_REPAY = 24,
 
     ADMIN_SETTINGS = 30,
     RESET_GAME = 31,
@@ -60,9 +62,23 @@ export type Depth = [asks: [price: number, qty: number][], bids: [price: number,
 export interface Portfolio {
     cash: number;
     shares: number;
+    /** Net of the loan's debt: borrowing alone doesn't change it, the interest does. */
     pnl: number;
     reservedCash: number;
     reservedShares: number;
+    /** The outstanding bank loan, null when there is none. */
+    loan: LoanInfo | null;
+}
+
+/** A bank loan, in dollars. Repaying it now costs `principal + interest`. */
+export interface LoanInfo {
+    principal: number;
+    /** Interest accrued so far. */
+    interest: number;
+    /** Interest owed on what's left if it's kept to the end of the game (what the bank collects then). */
+    maxInterest: number;
+    /** Game clock (epoch ms) when it was taken. */
+    time: number;
 }
 
 /** "partial": a market order that couldn't fill completely (the rest was dropped, IOC). */
@@ -110,6 +126,14 @@ export type OrderCancelRequest = { type: MessageType.ORDER_CANCEL; id: number };
 export const ORDER_CANCEL_ALL = -1;
 /** Change your display name (any phase). `username` is already cleaned by the parser (see cleanName). */
 export type RenameRequest = { type: MessageType.RENAME; username: string };
+/** Take a bank loan of `settings.loanAmount` (one at a time, while running, if `settings.enableBorrowing`). */
+export type LoanBorrowRequest = { type: MessageType.LOAN_BORROW };
+/**
+ * Repay the outstanding loan (`portion: "all"`, the default) or half of what's left of it, plus the
+ * interest accrued so far, from available cash. After a half repayment only the rest accrues interest.
+ */
+export type LoanRepayRequest = { type: MessageType.LOAN_REPAY; portion: LoanRepayPortion };
+export type LoanRepayPortion = "all" | "half";
 
 export type ClientMessage =
     | PingMessage
@@ -121,7 +145,9 @@ export type ClientMessage =
     | PowerSelectMessage
     | PowerConsumeRequest
     | OrderCancelRequest
-    | RenameRequest;
+    | RenameRequest
+    | LoanBorrowRequest
+    | LoanRepayRequest;
 
 // ---- server -> client --------------------------------------------------------------------
 

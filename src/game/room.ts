@@ -1,7 +1,9 @@
 import type { ServerConfig } from "../config";
 import type { OrderRejection } from "../engine/market";
 import { log } from "../log";
+import { formatCents } from "../engine/money";
 import { MessageType, POWER_SKIP_INDEX, type ClientMessage, type Notification, type ServerMessage } from "../protocol/messages";
+import type { LoanRejection } from "./bank";
 import { Game, type Catalog } from "./game";
 import { Player, RateLimiter, type Connection } from "./player";
 import { applySettingsUpdate, DEFAULT_SETTINGS, type GameSettings } from "./settings";
@@ -46,6 +48,14 @@ const REJECTION_TEXT: Record<OrderRejection, string> = {
     "insufficient-shares": "Not enough shares for that order.",
     "no-liquidity": "Nobody is on the other side of the book right now.",
     "unknown-account": "You are not part of this game.",
+};
+
+const LOAN_REJECTION_TEXT: Record<LoanRejection, string> = {
+    "borrowing-disabled": "The bank is closed in this game.",
+    "already-borrowed": "You already have a loan. Repay it before borrowing again.",
+    "game-over": "The game is over.",
+    "no-loan": "You don't have a loan to repay.",
+    "insufficient-cash": "Not enough available cash to repay the loan and its interest. Sell shares or cancel orders first.",
 };
 
 /**
@@ -206,6 +216,24 @@ export class Room {
                 if (this.phase !== "running") return this.tell(player, "warning", "Not now", "Powers can only be used while the game is running.");
                 if (this.game.powers.consume(player, msg.id)) this.scheduleFlush();
                 return;
+            case MessageType.LOAN_BORROW: {
+                if (this.phase !== "running") return this.tell(player, "warning", "Bank closed", "Loans are available while the game is running.");
+                const outcome = this.game.bank.borrow(player);
+                if (!outcome.ok) return this.tell(player, "error", "Loan refused", LOAN_REJECTION_TEXT[outcome.reason]);
+                this.tell(player, "success", "Loan granted", `You borrowed ${formatCents(outcome.principal)}. Interest builds up over time: keep it to the end and you pay ${formatCents(outcome.interest)}.`);
+                this.scheduleFlush();
+                return;
+            }
+            case MessageType.LOAN_REPAY: {
+                if (this.phase !== "running") return this.tell(player, "warning", "Bank closed", "Loans can be repaid while the game is running.");
+                const outcome = this.game.bank.repay(player, msg.portion);
+                if (!outcome.ok) return this.tell(player, "error", "Repayment refused", LOAN_REJECTION_TEXT[outcome.reason]);
+                const paid = `You paid back ${formatCents(outcome.principal)} plus ${formatCents(outcome.interest)} interest.`;
+                if (outcome.remaining === 0) this.tell(player, "success", "Loan repaid", paid);
+                else this.tell(player, "success", "Half the loan repaid", `${paid} ${formatCents(outcome.remaining)} left to repay; only that accrues interest now.`);
+                this.scheduleFlush();
+                return;
+            }
             case MessageType.RENAME:
                 // Nothing to broadcast: names only show up later (leaderboard, power notifications), read live.
                 player.name = msg.username;

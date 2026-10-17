@@ -452,6 +452,47 @@ describe("Room: trading", () => {
         expect(a.socket.last(MessageType.ORDER_UPDATE)).toMatchObject({ orders: [], reset: true });
     });
 
+    test("players borrow and repay while running; the bank explains refusals", async () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        const borrow = { type: MessageType.LOAN_BORROW } as const;
+        const repay = { type: MessageType.LOAN_REPAY, portion: "all" } as const;
+
+        room.handle(a.socket, borrow);
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Bank closed" });
+        expect(a.player.account.loan).toBeNull();
+
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.handle(a.socket, borrow);
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ level: "success", title: "Loan granted", description: expect.stringContaining("$5,000.00") });
+        await Bun.sleep(5); // flush timer
+        expect(a.socket.last(MessageType.PORTFOLIO_UPDATE)!.value).toMatchObject({ cash: 15_000, pnl: 0, loan: { principal: 5000, interest: 0, maxInterest: 500 } });
+
+        room.handle(a.socket, borrow);
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Loan refused", description: expect.stringContaining("already have a loan") });
+
+        room.handle(a.socket, { type: MessageType.LOAN_REPAY, portion: "half" });
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Half the loan repaid", description: expect.stringContaining("$2,500.00 left to repay") });
+
+        room.handle(a.socket, repay);
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Loan repaid" });
+        await Bun.sleep(5);
+        expect(a.socket.last(MessageType.PORTFOLIO_UPDATE)!.value).toMatchObject({ cash: 10_000, loan: null });
+
+        room.handle(a.socket, repay);
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Repayment refused" });
+    });
+
+    test("the host can turn the bank off and set the loan terms in the lobby", () => {
+        const { room, join } = lobby();
+        const a = join("alice");
+        room.handle(a.socket, { type: MessageType.ADMIN_SETTINGS, settings: { enableBorrowing: false, loanAmount: 1234, loanInterestPercent: 20 } });
+        expect(a.socket.last(MessageType.ROOM_STATE)!.settings).toMatchObject({ enableBorrowing: false, loanAmount: 1234, loanInterestPercent: 20 });
+        room.handle(a.socket, { type: MessageType.TOGGLE_PAUSE });
+        room.handle(a.socket, { type: MessageType.LOAN_BORROW });
+        expect(a.socket.last(MessageType.NOTIFICATION)).toMatchObject({ title: "Loan refused", description: "The bank is closed in this game." });
+    });
+
     test("per-player rate limit drops floods", () => {
         const { room, join } = lobby({ ...testConfig, orderBurst: 5, orderRate: 1 });
         const a = join("alice");

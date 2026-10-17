@@ -62,6 +62,11 @@ export function parseClientMessage(raw: string | Buffer): ClientMessage | null {
             const username = typeof m.username === "string" ? cleanName(m.username) : "";
             return username ? { type: MessageType.RENAME, username } : null;
         }
+        case MessageType.LOAN_BORROW:
+            return { type: MessageType.LOAN_BORROW };
+        case MessageType.LOAN_REPAY:
+            if (m.portion === undefined || m.portion === "all") return { type: MessageType.LOAN_REPAY, portion: "all" };
+            return m.portion === "half" ? { type: MessageType.LOAN_REPAY, portion: "half" } : null;
         default:
             return null;
     }

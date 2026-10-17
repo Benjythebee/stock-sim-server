@@ -137,5 +137,13 @@ export function portfolioOf(account: Account, markTicks: number): Portfolio {
         pnl: toDollars(account.pnl(markTicks)),
         reservedCash: toDollars(account.reservedCash),
         reservedShares: account.reservedShares,
+        loan: account.loan
+            ? {
+                  principal: toDollars(account.loan.principal),
+                  interest: toDollars(account.debt - account.loan.principal),
+                  maxInterest: toDollars(account.loan.maxInterest),
+                  time: account.loan.takenAt,
+              }
+            : null,
     };
 }

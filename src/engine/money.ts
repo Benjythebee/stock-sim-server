@@ -31,3 +31,8 @@ export function roundCents(dollars: number): number {
 export function clampPriceTicks(ticks: number): number {
     return Math.min(MAX_PRICE_TICKS, Math.max(MIN_PRICE_TICKS, ticks));
 }
+
+/** Cents as "$1,234.56", for player-facing text. */
+export function formatCents(cents: number): string {
+    return `$${toDollars(cents).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

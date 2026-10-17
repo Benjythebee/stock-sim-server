@@ -1,3 +1,5 @@
+import type { Loan } from "./loan";
+
 /**
  * Cash and share holdings of one trading participant (player or bot). All amounts in cents.
  *
@@ -21,6 +23,11 @@ export class Account {
 
     /** Active "no market impact" effects (Dark Pool). While > 0, this account's taker trades don't move the guide price. */
     impactShields = 0;
+
+    /** The outstanding bank loan, if any. */
+    loan: Loan | null = null;
+    /** What the loan costs to repay right now (principal + accrued interest). Counted against equity. */
+    debt = 0;
 
     /** Set on any change; the game loop sends portfolio updates for dirty accounts and clears it. */
     dirty = true;
@@ -50,9 +57,9 @@ export class Account {
         return this.tradingLocks > 0;
     }
 
-    /** Mark-to-market value in cents. */
+    /** Mark-to-market value in cents, net of debt (so borrowing alone doesn't change it). */
     equity(markTicks: number): number {
-        return this.cash + this.shares * markTicks;
+        return this.cash + this.shares * markTicks - this.debt;
     }
 
     /** Profit/loss in cents versus the starting position valued at the same mark. */
@@ -62,7 +69,8 @@ export class Account {
 
     /** Add (or, with a negative amount, remove) cash. Never takes reserved cash. */
     adjustCash(cents: number): number {
-        const applied = Math.max(cents, -this.availableCash);
+        // Available cash can be negative once the bank has collected an unpaid loan at the end.
+        const applied = Math.max(cents, -Math.max(0, this.availableCash));
         this.cash += applied;
         this.dirty = true;
         return applied;

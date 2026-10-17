@@ -64,4 +64,16 @@ describe("applySettingsUpdate", () => {
         expect(apply({ disabledPowers: ["ddos", "nope", 3, "ddos"] }).disabledPowers).toEqual(["ddos"]);
         expect(apply({ disabledPowers: "ddos" }).disabledPowers).toEqual([]);
     });
+
+    test("bank loans: on by default, $5,000 at 10%, amounts clamped", () => {
+        expect(DEFAULT_SETTINGS).toMatchObject({ enableBorrowing: true, loanAmount: 5000, loanInterestPercent: 10 });
+        expect(apply({ enableBorrowing: false }).enableBorrowing).toBe(false);
+        expect(apply({ enableBorrowing: "no" }).enableBorrowing).toBe(true);
+        expect(apply({ loanAmount: "2500.556" }).loanAmount).toBe(2500.56);
+        expect(apply({ loanAmount: 0 }).loanAmount).toBe(1);
+        expect(apply({ loanAmount: 1e12 }).loanAmount).toBe(999_999_999);
+        expect(apply({ loanInterestPercent: 25 }).loanInterestPercent).toBe(25);
+        expect(apply({ loanInterestPercent: -5 }).loanInterestPercent).toBe(0);
+        expect(apply({ loanInterestPercent: 5000 }).loanInterestPercent).toBe(1000);
+    });
 });
