@@ -34,7 +34,7 @@ describe("Room: joining", () => {
             MessageType.POWER_INVENTORY,
             MessageType.PLAYERS,
         ]);
-        expect(socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "alice", connected: true, host: true }], you: 0 });
+        expect(socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "alice", connected: true, host: true }], you: 0, streamer: false });
         expect(socket.last(MessageType.ORDER_UPDATE)).toMatchObject({ orders: [], reset: true });
         expect(socket.last(MessageType.ID)!.id).toBe(`r1-${player.resumeToken}`);
         expect(socket.last(MessageType.ROOM_STATE)).toMatchObject({ paused: true, started: false, ended: false, clients: 1, roomId: "r1" });
@@ -84,6 +84,7 @@ describe("Room: joining", () => {
             type: MessageType.PLAYERS,
             players: [{ name: "alice", connected: true, host: true }, { name: "bob", connected: true, host: false }],
             you: 0,
+            streamer: false,
         });
         expect(b.socket.last(MessageType.PLAYERS)!.you).toBe(1);
         expect(spec.last(MessageType.PLAYERS)!.you).toBe(-1);
@@ -96,7 +97,41 @@ describe("Room: joining", () => {
         room.disconnect(a.socket);
         expect(b.socket.last(MessageType.PLAYERS)!.players[0]).toEqual({ name: "alice", connected: false, host: true });
         await Bun.sleep(testConfig.reconnectGraceMs + 30);
-        expect(b.socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "Bobby", connected: true, host: true }], you: 0 });
+        expect(b.socket.last(MessageType.PLAYERS)).toEqual({ type: MessageType.PLAYERS, players: [{ name: "Bobby", connected: true, host: true }], you: 0, streamer: false });
+    });
+
+    test("PLAYERS.streamer is on while any seated player has streamer mode on, through a reconnect", async () => {
+        const { host, room, join } = lobby();
+        const a = join("alice");
+        const b = join("bob");
+        const spec = host.socket("r1", "tv", { spectator: true });
+        room.spectate(spec);
+
+        room.handle(a.socket, { type: MessageType.STREAMER_MODE, on: true });
+        expect(b.socket.last(MessageType.PLAYERS)!.streamer).toBe(true);
+        expect(spec.last(MessageType.PLAYERS)!.streamer).toBe(true);
+        // A newcomer gets it with the list it joins to.
+        expect(join("carol").socket.last(MessageType.PLAYERS)!.streamer).toBe(true);
+
+        // A refresh holds the seat, and the flag with it.
+        room.disconnect(a.socket);
+        expect(b.socket.last(MessageType.PLAYERS)!.streamer).toBe(true);
+        const again = join("alice", a.player.resumeToken);
+        expect(again.socket.last(MessageType.PLAYERS)!.streamer).toBe(true);
+
+        // Repeating the same value sends nothing new.
+        const sent = b.socket.of(MessageType.PLAYERS).length;
+        room.handle(again.socket, { type: MessageType.STREAMER_MODE, on: true });
+        expect(b.socket.of(MessageType.PLAYERS)).toHaveLength(sent);
+
+        room.handle(again.socket, { type: MessageType.STREAMER_MODE, on: false });
+        expect(b.socket.last(MessageType.PLAYERS)!.streamer).toBe(false);
+
+        // Removing the streamer's seat clears it too.
+        room.handle(b.socket, { type: MessageType.STREAMER_MODE, on: true });
+        room.disconnect(b.socket);
+        await Bun.sleep(testConfig.reconnectGraceMs + 30);
+        expect(again.socket.last(MessageType.PLAYERS)!.streamer).toBe(false);
     });
 
     test("RENAME changes the player's name, keeps the seat, and needs no host rights", () => {

@@ -35,6 +35,7 @@ export enum MessageType {
     PLAYERS = 22,
     LOAN_BORROW = 23,
     LOAN_REPAY = 24,
+    STREAMER_MODE = 25,
 
     ADMIN_SETTINGS = 30,
     RESET_GAME = 31,
@@ -134,6 +135,8 @@ export type LoanBorrowRequest = { type: MessageType.LOAN_BORROW };
  */
 export type LoanRepayRequest = { type: MessageType.LOAN_REPAY; portion: LoanRepayPortion };
 export type LoanRepayPortion = "all" | "half";
+/** Whether this player's own streamer mode is on (it hides the room code on their screen). Any phase; see PlayersMessage.streamer. */
+export type StreamerModeRequest = { type: MessageType.STREAMER_MODE; on: boolean };
 
 export type ClientMessage =
     | PingMessage
@@ -147,7 +150,8 @@ export type ClientMessage =
     | OrderCancelRequest
     | RenameRequest
     | LoanBorrowRequest
-    | LoanRepayRequest;
+    | LoanRepayRequest
+    | StreamerModeRequest;
 
 // ---- server -> client --------------------------------------------------------------------
 
@@ -163,8 +167,12 @@ export interface PlayerInfo {
     connected: boolean;
     host: boolean;
 }
-/** Everyone in the room, re-sent whole on any change (join, leave, rename, new host). `you` is the recipient's index, -1 for spectators. */
-export type PlayersMessage = { type: MessageType.PLAYERS; players: PlayerInfo[]; you: number };
+/**
+ * Everyone in the room, re-sent whole on any change (join, leave, rename, new host, streamer mode). `you` is the
+ * recipient's index, -1 for spectators. `streamer`: a seated player (connected or not) has streamer mode on, so the
+ * UI turns it on by default for everyone else, keeping the room code off anyone's screen that might be on stream.
+ */
+export type PlayersMessage = { type: MessageType.PLAYERS; players: PlayerInfo[]; you: number; streamer: boolean };
 export type IsAdminMessage = { type: MessageType.IS_ADMIN };
 /** `paused` is the new absolute state; clients must set it rather than toggle. */
 export type TogglePauseMessage = { type: MessageType.TOGGLE_PAUSE; paused: boolean };

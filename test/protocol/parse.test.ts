@@ -63,6 +63,13 @@ describe("parseClientMessage", () => {
         expect(parse({ type: 21 })).toBeNull();
     });
 
+    test("streamer mode: a boolean", () => {
+        expect(parse({ type: 25, on: true })).toEqual({ type: MessageType.STREAMER_MODE, on: true });
+        expect(parse({ type: 25, on: false })).toEqual({ type: MessageType.STREAMER_MODE, on: false });
+        expect(parse({ type: 25, on: 1 })).toBeNull();
+        expect(parse({ type: 25 })).toBeNull();
+    });
+
     test("bank loans: borrow has no fields, repay takes all (default) or half", () => {
         expect(parse({ type: 23, amount: 1e9 })).toEqual({ type: MessageType.LOAN_BORROW });
         expect(parse({ type: 24 })).toEqual({ type: MessageType.LOAN_REPAY, portion: "all" });

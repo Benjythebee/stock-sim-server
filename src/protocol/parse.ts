@@ -67,6 +67,8 @@ export function parseClientMessage(raw: string | Buffer): ClientMessage | null {
         case MessageType.LOAN_REPAY:
             if (m.portion === undefined || m.portion === "all") return { type: MessageType.LOAN_REPAY, portion: "all" };
             return m.portion === "half" ? { type: MessageType.LOAN_REPAY, portion: "half" } : null;
+        case MessageType.STREAMER_MODE:
+            return typeof m.on === "boolean" ? { type: MessageType.STREAMER_MODE, on: m.on } : null;
         default:
             return null;
     }

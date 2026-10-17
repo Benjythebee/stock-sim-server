@@ -239,6 +239,11 @@ export class Room {
                 player.name = msg.username;
                 this.sendPlayers();
                 return;
+            case MessageType.STREAMER_MODE:
+                if (player.streamerMode === msg.on) return;
+                player.streamerMode = msg.on;
+                this.sendPlayers();
+                return;
         }
 
         if (player.id !== this.adminId) return this.tell(player, "error", "Host only", "Only the host can do that.");
@@ -338,8 +343,9 @@ export class Room {
 
     /** The room's humans for one recipient: `you` is their index in the list (-1 for spectators). */
     playersMessage(you: number): ServerMessage {
-        const players = [...this.players.values()].map((p) => ({ name: p.name, connected: p.connected, host: p.id === this.adminId }));
-        return { type: MessageType.PLAYERS, players, you };
+        const seated = [...this.players.values()];
+        const players = seated.map((p) => ({ name: p.name, connected: p.connected, host: p.id === this.adminId }));
+        return { type: MessageType.PLAYERS, players, you, streamer: seated.some((p) => p.streamerMode) };
     }
 
     /**

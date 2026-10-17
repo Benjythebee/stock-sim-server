@@ -47,6 +47,8 @@ export class Player {
      * Separate from `id`, which is internal and must never be what resumes a seat.
      */
     readonly resumeToken = crypto.randomUUID();
+    /** The player's own streamer mode (STREAMER_MODE). Kept through a reconnect, so a refresh doesn't flip PLAYERS.streamer. */
+    streamerMode = false;
     /** Active "hide my trades" effects (Burner Phone). Counted so overlapping effects stack. */
     private concealment = 0;
 
