@@ -124,6 +124,29 @@ describe("Bank", () => {
         expect(game.result!.players[0]!.pnl).toBe(-500);
     });
 
+    test("a loan can be taken at another rate, e.g. interest-free", () => {
+        const { game, player, account } = setup();
+        expect(game.bank.borrow(player, 0)).toEqual({ ok: true, principal: 500_000, interest: 0, remaining: 500_000 });
+        runSeconds(game, 30);
+        expect(account.debt).toBe(500_000);
+        expect(account.pnl(game.market.markTicks)).toBe(0);
+    });
+
+    test("forgiving interest writes off what accrued and stops it accruing", () => {
+        const { game, player, account, socket } = setup();
+        expect(game.bank.forgiveInterest(player)).toBeNull();
+        game.bank.borrow(player);
+        runSeconds(game, 15);
+        expect(account.debt).toBe(512_500);
+        expect(game.bank.forgiveInterest(player)).toBe(12_500);
+        expect(account.debt).toBe(500_000);
+        runSeconds(game, 15);
+        expect(account.debt).toBe(500_000);
+        expect(socket.last(MessageType.PORTFOLIO_UPDATE)!.value).toMatchObject({ pnl: 0, loan: { principal: 5000, interest: 0, maxInterest: 0 } });
+        expect(game.bank.repay(player)).toEqual({ ok: true, principal: 500_000, interest: 0, remaining: 0 });
+        expect(account.availableCash).toBe(1_000_000);
+    });
+
     test("no loans once the game is over", () => {
         const { game, player } = setup();
         runSeconds(game, 60);

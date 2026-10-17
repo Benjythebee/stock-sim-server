@@ -49,6 +49,8 @@ export default definePower({
   the power still loads with a "missing" icon and the server logs a warning.
 - Players' browsers get the list of installed powers and preload every mod icon when they connect
   (the `CONTENT_MANIFEST` message), so nothing needs to change in the UI to add a power.
+- `available: (game) => boolean` (mod API 3) keeps a power out of a game's briefcases, e.g. a
+  power about bank loans when the room turned borrowing off (see `powers/too-big-to-fail/`).
 - Full reference: `.claude/skills/add-power/SKILL.md` and `.claude/skills/add-bot/SKILL.md`.
 
 ## Animations

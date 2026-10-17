@@ -30,4 +30,15 @@ describe("Loan", () => {
         const loan = new Loan(1000, 0.25, 10, 10);
         expect(loan.interestAt(10)).toBe(250);
     });
+
+    test("refinancing writes off the interest so far and accrues at the new rate from then on", () => {
+        const loan = new Loan(500_000, 0.1, 0, 1000);
+        expect(loan.interestAt(500)).toBe(25_000);
+        loan.refinance(0, 500);
+        expect(loan.rate).toBe(0);
+        expect(loan.principal).toBe(500_000);
+        expect(loan.interestAt(500)).toBe(0);
+        expect(loan.maxInterest).toBe(0);
+        expect(loan.owedAt(1000)).toBe(500_000);
+    });
 });

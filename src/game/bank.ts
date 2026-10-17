@@ -23,7 +23,8 @@ export class Bank {
         return this.game.durationSteps;
     }
 
-    borrow(player: Player): BankOutcome {
+    /** Lend `settings.loanAmount` at `rate` (a fraction over the loan's term; defaults to the room's rate). */
+    borrow(player: Player, rate = this.game.settings.loanInterestPercent / 100): BankOutcome {
         const { settings } = this.game;
         if (!settings.enableBorrowing) return { ok: false, reason: "borrowing-disabled" };
         if (this.game.ended || this.game.step >= this.endStep) return { ok: false, reason: "game-over" };
@@ -31,7 +32,7 @@ export class Bank {
         if (account.loan) return { ok: false, reason: "already-borrowed" };
 
         const principal = toTicks(settings.loanAmount);
-        account.loan = new Loan(principal, settings.loanInterestPercent / 100, this.game.step, this.endStep, this.game.stepClock);
+        account.loan = new Loan(principal, rate, this.game.step, this.endStep, this.game.stepClock);
         account.debt = principal;
         account.adjustCash(principal);
         return { ok: true, principal, interest: account.loan.maxInterest, remaining: principal };
@@ -55,6 +56,22 @@ export class Bank {
         if (loan.principal === 0) account.loan = null;
         account.debt = account.loan ? loan.owedAt(step) : 0;
         return { ok: true, principal, interest, remaining: loan.principal };
+    }
+
+    /**
+     * Make the player's loan interest-free from now on and write off the interest accrued so far.
+     * Returns the cents written off, or null without a loan.
+     */
+    forgiveInterest(player: Player): number | null {
+        const account = player.account;
+        const loan = account.loan;
+        if (!loan) return null;
+        const step = this.game.step;
+        const forgiven = loan.interestAt(step);
+        loan.refinance(0, step);
+        account.debt = loan.owedAt(step);
+        account.dirty = true;
+        return forgiven;
     }
 
     /** Bring every borrower's debt up to date (once per game second, so their P&L ticks down). */

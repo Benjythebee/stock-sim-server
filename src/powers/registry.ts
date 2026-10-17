@@ -31,6 +31,7 @@ export function powerProblems(def: AnyPowerDefinition): string[] {
     if (duration === 0 && (def.onTick || def.onExpire)) problems.push("onTick/onExpire never run when durationSeconds is 0");
     if (!def.onActivate && !def.onTick && !def.onExpire) problems.push("a power needs at least one hook");
     if (def.state !== undefined && typeof def.state !== "function") problems.push("state must be a function returning fresh state");
+    if (def.available !== undefined && typeof def.available !== "function") problems.push("available must be a function of the game");
     if (def.icon !== undefined && typeof def.icon !== "string") problems.push("icon must be a string");
     if (def.iconCredit !== undefined && typeof def.iconCredit?.author !== "string") problems.push("iconCredit needs an author");
     if (def.apiVersion !== undefined && !(Number.isInteger(def.apiVersion) && def.apiVersion >= 1)) problems.push("apiVersion must be an integer >= 1");

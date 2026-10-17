@@ -13,8 +13,8 @@ export class Loan {
 
     constructor(
         principal: number,
-        /** Interest over the whole term, as a fraction (0.1 = 10%). */
-        readonly rate: number,
+        /** Interest over the whole term, as a fraction (0.1 = 10%). See refinance(). */
+        public rate: number,
         readonly startStep: number,
         readonly endStep: number,
         /** Game clock (epoch ms) when it was taken, for display. */
@@ -51,5 +51,14 @@ export class Loan {
         this.principal -= Math.min(principal, this.principal);
         this.accruedFrom = Math.max(this.accruedFrom, Math.min(step, this.endStep));
         return interest;
+    }
+
+    /**
+     * From `step` on, accrue interest at `rate` instead. The interest accrued before `step` is
+     * written off, not collected.
+     */
+    refinance(rate: number, step: number): void {
+        this.payDown(0, step);
+        this.rate = rate;
     }
 }

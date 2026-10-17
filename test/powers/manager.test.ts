@@ -57,6 +57,27 @@ describe("PowerManager", () => {
         expect(new Set(offered)).toEqual(new Set(["other"]));
     });
 
+    test("powers that aren't available in this game are never offered", () => {
+        const borrowing = definePower({ ...lifecyclePower([]), id: "borrowing", available: (game) => game.settings.enableBorrowing });
+        const broken = definePower({ ...lifecyclePower([]), id: "broken", available: () => { throw new Error("boom"); } });
+        log.setLevel("silent");
+        try {
+            for (const enableBorrowing of [true, false]) {
+                const { game } = makeGame({ enableBorrowing }, catalogWith({ bots: noBots, powers: [borrowing, broken, { ...lifecyclePower([]), id: "other" }] }));
+                const { player, socket } = makePlayer();
+                game.addPlayer(player);
+                for (let i = 0; i < 20; i++) game.powers.openBriefcases();
+                const offered = new Set(socket.of(MessageType.POWER_OFFERS).flatMap((m) => m.offers.map((o) => o.id)));
+                expect(offered).toEqual(new Set(enableBorrowing ? ["borrowing", "other"] : ["other"]));
+            }
+            // Nothing available at all: no briefcases are scheduled.
+            const { game } = makeGame({ gameDuration: 1, enableBorrowing: false }, catalogWith({ bots: noBots, powers: [borrowing] }));
+            expect(game.powers.upcomingBriefcases).toEqual([]);
+        } finally {
+            log.setLevel("warn");
+        }
+    });
+
     test("no briefcases when powers are off, or every power is disabled", () => {
         for (const settings of [{ enablePowers: false }, { disabledPowers: ["lifecycle"] }]) {
             const { game } = makeGame({ gameDuration: 1, ...settings }, catalogWith({ bots: noBots, powers: [lifecyclePower([])] }));

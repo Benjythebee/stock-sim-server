@@ -10,8 +10,9 @@ import pkg from "../package.json";
  *
  *   1  powers, bots and news as of the v2 rewrite
  *   2  ctx.present(): the "wheel" presentation (POWER_PRESENT)
+ *   3  definePower `available(game)`; bank loans through ctx.game.bank (borrow at a custom rate, forgiveInterest)
  */
-export const MOD_API_VERSION = 2;
+export const MOD_API_VERSION = 3;
 
 /** The server's own version (package.json). */
 export const SERVER_VERSION: string = pkg.version;

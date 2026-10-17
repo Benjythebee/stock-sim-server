@@ -48,6 +48,12 @@ export interface PowerDefinition<S extends object = Record<string, never>> {
     apiVersion?: number;
     /** Reserved for a future shop. */
     price?: number;
+    /**
+     * Whether this game can offer it at all, e.g. `(game) => game.settings.enableBorrowing` for a
+     * power about bank loans. Checked when the game is set up and when briefcases open. Omitted =
+     * always. Needs `apiVersion: 3`.
+     */
+    available?(game: Game): boolean;
     /** Fresh per-activation state. Called once each time the power is activated. */
     state?: () => S;
 

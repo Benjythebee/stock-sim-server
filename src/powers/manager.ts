@@ -104,7 +104,7 @@ export class PowerManager {
         private readonly rng: Rng,
     ) {
         // No briefcases at all when the room turned powers off, or switched every one of them off.
-        const any = game.settings.enablePowers && registry.offerable(game.settings.disabledPowers).length > 0;
+        const any = game.settings.enablePowers && this.pool().length > 0;
         this.schedule = any ? briefcaseSchedule(game.durationSeconds) : [];
     }
 
@@ -141,13 +141,26 @@ export class PowerManager {
     }
 
     openBriefcases(): void {
-        const pool = this.registry.offerable(this.game.settings.disabledPowers);
+        const pool = this.pool();
         for (const player of this.game.players()) {
             const picks = weightedSample(this.rng, pool, (d) => d.weight, OFFERS_PER_BRIEFCASE);
             if (picks.length === 0) continue;
             this.offers.set(player.id, picks);
             this.sendOffers(player);
         }
+    }
+
+    /** What a briefcase can draw from: offerable, not disabled by the room, and available in this game. */
+    private pool(): AnyPowerDefinition[] {
+        return this.registry.offerable(this.game.settings.disabledPowers).filter((def) => {
+            if (!def.available) return true;
+            try {
+                return def.available(this.game);
+            } catch (err) {
+                log.error(`power "${def.id}" available threw`, err);
+                return false;
+            }
+        });
     }
 
     /** Player picked offer #index from their briefcase. */
